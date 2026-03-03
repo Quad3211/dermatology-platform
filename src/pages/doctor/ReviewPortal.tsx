@@ -1,191 +1,565 @@
 import { useState } from "react";
 import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Calendar,
+  ChevronRight,
+  X,
+  Loader2,
+  User,
+} from "lucide-react";
+import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../components/core/Card";
 import { Button } from "../../components/core/Button";
-import {
-  Search,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-  MessageSquare,
-} from "lucide-react";
-import { SecureTextChat } from "../../components/shared/SecureTextChat";
+import { cn } from "../../utils/cn";
+import { supabase } from "../../config/supabase";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+// ── Types ──────────────────────────────────────────────────────
+interface Consultation {
+  id: string;
+  status: string;
+  urgency: string;
+  patient_notes: string | null;
+  preferred_date: string | null;
+  scheduled_at: string | null;
+  doctor_notes: string | null;
+  created_at: string;
+  patient: { id: string; full_name: string } | null;
+  analysis: {
+    id: string;
+    risk_level: string;
+    confidence: number;
+    severity_score: number;
+    summary: string | null;
+    referral_required: boolean;
+    emergency_flag: boolean;
+  } | null;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+const RISK_COLORS: Record<string, string> = {
+  CRITICAL: "bg-red-100 text-red-700 ring-red-200",
+  HIGH: "bg-orange-100 text-orange-700 ring-orange-200",
+  MODERATE: "bg-yellow-100 text-yellow-700 ring-yellow-200",
+  LOW: "bg-green-100 text-green-700 ring-green-200",
+};
+
+const URGENCY_ORDER: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  SOON: 2,
+  ROUTINE: 3,
+};
+
+function formatRelative(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── Main Component ─────────────────────────────────────────────
 export function ReviewPortal() {
-  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<Consultation | null>(null);
 
-  const pendingCases = [
-    {
-      id: "A94-F",
-      name: "Confidential Patient",
-      risk: "HIGH",
-      time: "10 mins ago",
-      ai: "89.2%",
-    },
-    {
-      id: "B22-X",
-      name: "Confidential Patient",
-      risk: "MODERATE",
-      time: "2 hours ago",
-      ai: "74.1%",
-    },
-    {
-      id: "C19-L",
-      name: "Confidential Patient",
-      risk: "LOW",
-      time: "5 hours ago",
-      ai: "92.0%",
-    },
-  ];
+  // Scheduling state
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("09:00");
+  const [doctorNotes, setDoctorNotes] = useState("");
+  const [activeTab, setActiveTab] = useState<
+    "pending" | "scheduled" | "reviewed"
+  >("pending");
 
-  if (activeSession) {
+  // ── Fetch consultations ──────────────────────────────────────
+  const { data: consultations = [], isLoading } = useQuery<Consultation[]>({
+    queryKey: ["doctor-consultations"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("consultations")
+        .select(
+          `
+          id, status, urgency, patient_notes, preferred_date,
+          scheduled_at, doctor_notes, created_at,
+          patient:profiles!consultations_patient_id_fkey(id, full_name),
+          analysis:analysis_results(
+            id, risk_level, confidence, severity_score,
+            summary, referral_required, emergency_flag
+          )
+        `,
+        )
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as unknown as Consultation[];
+    },
+    refetchInterval: 30_000, // refresh every 30s
+  });
+
+  // ── Schedule appointment mutation ────────────────────────────
+  const scheduleMutation = useMutation({
+    mutationFn: async ({
+      id,
+      scheduledAt,
+      notes,
+    }: {
+      id: string;
+      scheduledAt: string;
+      notes: string;
+    }) => {
+      const { error } = await supabase
+        .from("consultations")
+        .update({
+          status: "scheduled",
+          scheduled_at: scheduledAt,
+          doctor_notes: notes || null,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["doctor-consultations"] });
+      setSelected(null);
+      setSchedDate("");
+      setSchedTime("09:00");
+      setDoctorNotes("");
+    },
+  });
+
+  // ── Mark reviewed mutation ───────────────────────────────────
+  const reviewMutation = useMutation({
+    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
+      const { error } = await supabase
+        .from("consultations")
+        .update({
+          status: "reviewed",
+          doctor_notes: notes || null,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["doctor-consultations"] });
+      setSelected(null);
+      setDoctorNotes("");
+    },
+  });
+
+  // ── Filter by tab ────────────────────────────────────────────
+  const filtered = consultations
+    .filter((c) =>
+      activeTab === "pending"
+        ? c.status === "pending"
+        : activeTab === "scheduled"
+          ? c.status === "scheduled"
+          : ["reviewed", "closed"].includes(c.status),
+    )
+    .sort(
+      (a, b) =>
+        (URGENCY_ORDER[a.urgency] ?? 9) - (URGENCY_ORDER[b.urgency] ?? 9),
+    );
+
+  const counts = {
+    pending: consultations.filter((c) => c.status === "pending").length,
+    scheduled: consultations.filter((c) => c.status === "scheduled").length,
+    reviewed: consultations.filter((c) =>
+      ["reviewed", "closed"].includes(c.status),
+    ).length,
+  };
+
+  // ── Scheduling panel ─────────────────────────────────────────
+  if (selected) {
+    const analysis = selected.analysis;
+    const minDate = new Date();
+    minDate.setDate(minDate.getDate() + 1);
+
     return (
-      <div className="max-w-7xl mx-auto space-y-6 fade-in p-8 bg-surface-muted min-h-screen">
-        <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-surface-border shadow-sm mb-6">
+      <div className="max-w-5xl mx-auto p-6 space-y-6 fade-in">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              Active Consultation: Case #{activeSession}
+            <h1 className="text-2xl font-bold text-slate-900">
+              Schedule Appointment
             </h1>
-            <p className="text-xs font-semibold text-primary-600 mt-0.5">
-              SECURE TEXT MODALITY ACTIVE
+            <p className="text-slate-500 text-sm mt-1">
+              Patient:{" "}
+              <span className="font-medium text-slate-700">
+                {selected.patient?.full_name ?? "Unknown"}
+              </span>
             </p>
           </div>
-          <Button variant="outline" onClick={() => setActiveSession(null)}>
-            End Session
-          </Button>
+          <button
+            onClick={() => setSelected(null)}
+            className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-6">
-            <Card className="border-t-4 border-t-status-danger">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-slate-500 uppercase tracking-wider">
-                  Automated AI Triage Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-red-50 text-status-danger p-4 rounded-lg flex items-center mb-6 border border-red-200">
-                  <AlertTriangle className="mr-3 h-8 w-8" />
-                  <div>
-                    <p className="font-bold text-xl leading-none">HIGH RISK</p>
-                    <p className="text-xs font-medium mt-1">
-                      AI Confidence: 89.2%
-                    </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* AI Analysis summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm uppercase tracking-wider text-slate-500">
+                AI Triage Result
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {analysis ? (
+                <>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg ring-1",
+                      RISK_COLORS[analysis.risk_level] ?? "bg-slate-100",
+                    )}
+                  >
+                    <AlertTriangle className="h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="font-bold">{analysis.risk_level} RISK</p>
+                      <p className="text-xs opacity-80">
+                        Confidence:{" "}
+                        {((analysis.confidence ?? 0) * 100).toFixed(0)}% ·
+                        Severity: {analysis.severity_score?.toFixed(1) ?? "—"}
+                        /10
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-5">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-surface-border pb-1 mb-2">
-                      Topographic Location
-                    </p>
-                    <p className="font-medium text-slate-800">Torso (Back)</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-surface-border pb-1 mb-2">
-                      Highlighted Features
-                    </p>
-                    <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
-                      <li>Asymmetry detected (A)</li>
-                      <li>Uneven macroscopic border (B)</li>
-                      <li>Diameter exceeds 6mm (D)</li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
-          <div className="lg:col-span-2">
-            <SecureTextChat />
-          </div>
+                  {analysis.summary && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                        AI Summary
+                      </p>
+                      <p className="text-sm text-slate-700 leading-relaxed">
+                        {analysis.summary}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 text-xs">
+                    {analysis.referral_required && (
+                      <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">
+                        Referral Required
+                      </span>
+                    )}
+                    {analysis.emergency_flag && (
+                      <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium animate-pulse">
+                        🚨 Emergency
+                      </span>
+                    )}
+                  </div>
+
+                  {selected.patient_notes && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                        Patient Notes
+                      </p>
+                      <p className="text-sm text-slate-700 italic">
+                        "{selected.patient_notes}"
+                      </p>
+                    </div>
+                  )}
+
+                  {selected.preferred_date && (
+                    <div className="text-xs text-slate-500">
+                      Patient's preferred date:{" "}
+                      <strong>
+                        {new Date(selected.preferred_date).toLocaleDateString(
+                          "en-US",
+                          {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                          },
+                        )}
+                      </strong>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  No analysis data available.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Scheduling form */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm uppercase tracking-wider text-slate-500">
+                Set Appointment Date & Time
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={schedDate}
+                  min={minDate.toISOString().split("T")[0]}
+                  onChange={(e) => setSchedDate(e.target.value)}
+                  className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Time
+                </label>
+                <input
+                  type="time"
+                  value={schedTime}
+                  onChange={(e) => setSchedTime(e.target.value)}
+                  className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Doctor Notes (shown to patient)
+                </label>
+                <textarea
+                  rows={3}
+                  value={doctorNotes}
+                  onChange={(e) => setDoctorNotes(e.target.value)}
+                  placeholder="Add any pre-appointment guidance or notes for the patient..."
+                  className="w-full border border-surface-border rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                />
+              </div>
+
+              {scheduleMutation.isError && (
+                <p className="text-xs text-red-600">
+                  Failed to schedule. Please try again.
+                </p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  className="flex-1"
+                  disabled={!schedDate || scheduleMutation.isPending}
+                  onClick={() =>
+                    scheduleMutation.mutate({
+                      id: selected.id,
+                      scheduledAt: `${schedDate}T${schedTime}:00`,
+                      notes: doctorNotes,
+                    })
+                  }
+                >
+                  {scheduleMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Calendar className="h-4 w-4 mr-2" />
+                  )}
+                  Confirm Appointment
+                </Button>
+
+                {selected.status === "scheduled" && (
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    disabled={reviewMutation.isPending}
+                    onClick={() =>
+                      reviewMutation.mutate({
+                        id: selected.id,
+                        notes: doctorNotes,
+                      })
+                    }
+                  >
+                    {reviewMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Mark Reviewed
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
+  // ── Queue list ────────────────────────────────────────────────
   return (
-    <div className="max-w-6xl mx-auto space-y-6 fade-in p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-            Dermatologist Review Portal
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Review incoming AI-triaged queues and conduct secure patient
-            follow-ups.
-          </p>
-        </div>
-        <div className="flex items-center bg-white border border-surface-border rounded-lg px-3 py-2.5 shadow-sm max-w-sm w-full">
-          <Search className="h-5 w-5 text-slate-400 mr-2" />
-          <input
-            type="text"
-            placeholder="Search case ID..."
-            className="border-none focus:ring-0 text-sm flex-1 outline-none bg-transparent"
-          />
-        </div>
+    <div className="max-w-5xl mx-auto p-6 space-y-6 fade-in">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">
+          Dermatologist Review Portal
+        </h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Review AI-triaged cases, schedule appointments, and write patient
+          assessments.
+        </p>
       </div>
 
-      <Card className="overflow-hidden shadow-card border-none ring-1 ring-surface-border">
-        <div className="bg-slate-50 border-b border-surface-border px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-800">
-            Pending Triage Queue
-          </h3>
-          <span className="bg-status-danger text-white text-xs font-bold px-2 py-1 rounded-full">
-            3 Needs Attention
-          </span>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        {(["pending", "scheduled", "reviewed"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-medium capitalize transition-colors",
+              activeTab === tab
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700",
+            )}
+          >
+            {tab}
+            {counts[tab] > 0 && (
+              <span
+                className={cn(
+                  "ml-2 text-xs px-1.5 py-0.5 rounded-full font-bold",
+                  tab === "pending"
+                    ? "bg-red-500 text-white"
+                    : "bg-slate-300 text-slate-700",
+                )}
+              >
+                {counts[tab]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-slate-400">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          Loading consultations…
         </div>
-        <div className="divide-y divide-surface-border bg-white">
-          {pendingCases.map((c) => (
-            <div
-              key={c.id}
-              className="p-6 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50 transition-colors gap-4"
-            >
-              <div className="flex items-center space-x-6">
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-slate-400">
+          <CheckCircle className="h-10 w-10 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">
+            {activeTab === "pending"
+              ? "No pending consultations"
+              : activeTab === "scheduled"
+                ? "No scheduled appointments"
+                : "No reviewed cases yet"}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((c) => {
+            const analysis = c.analysis;
+            return (
+              <button
+                key={c.id}
+                onClick={() => {
+                  setSelected(c);
+                  setDoctorNotes(c.doctor_notes ?? "");
+                  if (c.scheduled_at) {
+                    const d = new Date(c.scheduled_at);
+                    setSchedDate(d.toISOString().split("T")[0]);
+                    setSchedTime(
+                      `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`,
+                    );
+                  }
+                }}
+                className="w-full text-left bg-white border border-surface-border rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-all group"
+              >
+                {/* Risk badge */}
                 <div
-                  className={`p-4 rounded-full ${c.risk === "HIGH" ? "bg-red-50 text-status-danger ring-1 ring-red-200" : c.risk === "MODERATE" ? "bg-yellow-50 text-status-warning ring-1 ring-yellow-200" : "bg-green-50 text-status-safe ring-1 ring-green-200"}`}
+                  className={cn(
+                    "p-3 rounded-full ring-1 shrink-0",
+                    RISK_COLORS[analysis?.risk_level ?? "LOW"],
+                  )}
                 >
-                  {c.risk === "HIGH" ? (
-                    <AlertTriangle className="h-6 w-6" />
-                  ) : c.risk === "MODERATE" ? (
-                    <AlertTriangle className="h-6 w-6" />
+                  {analysis?.risk_level === "LOW" ? (
+                    <CheckCircle className="h-5 w-5" />
                   ) : (
-                    <CheckCircle className="h-6 w-6" />
+                    <AlertTriangle className="h-5 w-5" />
                   )}
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Case #{c.id}:{" "}
-                    <span className="text-slate-500 font-normal italic">
-                      {c.name}
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-slate-400" />
+                      {c.patient?.full_name ?? "Unknown Patient"}
                     </span>
-                  </h3>
-                  <div className="flex items-center space-x-4 mt-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    <span className="flex items-center">
-                      <Clock className="h-3.5 w-3.5 mr-1.5" /> {c.time}
+                    <span
+                      className={cn(
+                        "text-xs font-bold px-2 py-0.5 rounded-full ring-1",
+                        RISK_COLORS[analysis?.risk_level ?? "LOW"],
+                      )}
+                    >
+                      {analysis?.risk_level ?? "—"} RISK
                     </span>
-                    <span className="text-slate-300">|</span>
-                    <span>AI Confidence {c.ai}</span>
+                    {analysis?.emergency_flag && (
+                      <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full font-bold animate-pulse">
+                        🚨 EMERGENCY
+                      </span>
+                    )}
                   </div>
+
+                  <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {formatRelative(c.created_at)}
+                    </span>
+                    {analysis && (
+                      <span>
+                        Confidence:{" "}
+                        {((analysis.confidence ?? 0) * 100).toFixed(0)}%
+                      </span>
+                    )}
+                    {c.preferred_date && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Prefers:{" "}
+                        {new Date(c.preferred_date).toLocaleDateString(
+                          "en-US",
+                          {
+                            month: "short",
+                            day: "numeric",
+                          },
+                        )}
+                      </span>
+                    )}
+                    {c.scheduled_at && (
+                      <span className="text-green-600 font-medium flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Scheduled:{" "}
+                        {new Date(c.scheduled_at).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
+                  </div>
+
+                  {c.patient_notes && (
+                    <p className="text-xs text-slate-400 mt-1 italic truncate">
+                      "{c.patient_notes}"
+                    </p>
+                  )}
                 </div>
-              </div>
-              <Button
-                onClick={() => setActiveSession(c.id)}
-                className="w-full sm:w-auto"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" /> Open Session
-              </Button>
-            </div>
-          ))}
+
+                <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-500 shrink-0 transition-colors" />
+              </button>
+            );
+          })}
         </div>
-      </Card>
-      <p className="text-center text-xs text-slate-400 mt-6">
-        All queue items are stripped of identifying records until connection is
-        securely authenticated.
-      </p>
+      )}
     </div>
   );
 }

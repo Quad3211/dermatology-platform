@@ -1,8 +1,21 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Requires .env setup: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL || "https://usvoktqvnprakqqodrmq.supabase.co";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzdm9rdHF2bnByYWtxcW9kcm1xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNzQ3MjcsImV4cCI6MjA4Nzk1MDcyN30.ESxPTYJ75QXRGEj74l0h4VtgBLc_2YALWbaaDfBo2vk";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnon) {
+  throw new Error(
+    "[DermTriage] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.",
+  );
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnon, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+  realtime: {
+    params: { eventsPerSecond: 10 },
+  },
+});

@@ -293,61 +293,209 @@ export function ReviewPortal() {
             </CardContent>
           </Card>
 
-          {/* Scheduling form */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm uppercase tracking-wider text-slate-500">
-                Set Appointment Date & Time
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={schedDate}
-                  min={minDate.toISOString().split("T")[0]}
-                  onChange={(e) => setSchedDate(e.target.value)}
-                  className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Time
-                </label>
-                <input
-                  type="time"
-                  value={schedTime}
-                  onChange={(e) => setSchedTime(e.target.value)}
-                  className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Doctor Notes (shown to patient)
-                </label>
-                <textarea
-                  rows={3}
-                  value={doctorNotes}
-                  onChange={(e) => setDoctorNotes(e.target.value)}
-                  placeholder="Add any pre-appointment guidance or notes for the patient..."
-                  className="w-full border border-surface-border rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
-                />
-              </div>
-
-              {scheduleMutation.isError && (
-                <p className="text-xs text-red-600">
-                  Failed to schedule. Please try again.
+          {/* Right panel — status-aware */}
+          {["reviewed", "closed"].includes(selected.status) ? (
+            /* REVIEWED: read-only summary */
+            <Card className="border-t-4 border-t-slate-300">
+              <CardHeader>
+                <CardTitle className="text-sm uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-slate-400" />
+                  Case Closed
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selected.scheduled_at && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1">
+                      Appointment Was
+                    </p>
+                    <p className="font-semibold text-slate-800">
+                      {new Date(selected.scheduled_at).toLocaleDateString(
+                        "en-US",
+                        { weekday: "long", month: "long", day: "numeric" },
+                      )}
+                      {" at "}
+                      {new Date(selected.scheduled_at).toLocaleTimeString(
+                        "en-US",
+                        { hour: "numeric", minute: "2-digit" },
+                      )}
+                    </p>
+                  </div>
+                )}
+                {selected.doctor_notes && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                      Doctor Notes
+                    </p>
+                    <p className="text-sm text-slate-700 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                      {selected.doctor_notes}
+                    </p>
+                  </div>
+                )}
+                <p className="text-xs text-slate-400 text-center pt-2">
+                  This consultation has been completed and is read-only.
                 </p>
-              )}
+              </CardContent>
+            </Card>
+          ) : selected.status === "scheduled" ? (
+            /* SCHEDULED: show confirmed details + complete button */
+            <Card className="border-t-4 border-t-green-400">
+              <CardHeader>
+                <CardTitle className="text-sm uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Appointment Confirmed
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selected.scheduled_at && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                    <p className="text-xs text-green-600 font-semibold uppercase tracking-wider mb-1">
+                      Scheduled For
+                    </p>
+                    <p className="text-xl font-bold text-green-900">
+                      {new Date(selected.scheduled_at).toLocaleDateString(
+                        "en-US",
+                        { weekday: "long", month: "long", day: "numeric" },
+                      )}
+                    </p>
+                    <p className="text-lg text-green-800 mt-0.5">
+                      {new Date(selected.scheduled_at).toLocaleTimeString(
+                        "en-US",
+                        { hour: "numeric", minute: "2-digit" },
+                      )}
+                    </p>
+                  </div>
+                )}
 
-              <div className="flex gap-3 pt-2">
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-slate-500 hover:text-slate-700 select-none">
+                    Need to reschedule?
+                  </summary>
+                  <div className="mt-3 space-y-3 pt-3 border-t border-surface-border">
+                    <input
+                      type="date"
+                      value={schedDate}
+                      min={minDate.toISOString().split("T")[0]}
+                      onChange={(e) => setSchedDate(e.target.value)}
+                      className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                    <input
+                      type="time"
+                      value={schedTime}
+                      onChange={(e) => setSchedTime(e.target.value)}
+                      className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!schedDate || scheduleMutation.isPending}
+                      onClick={() =>
+                        scheduleMutation.mutate({
+                          id: selected.id,
+                          scheduledAt: `${schedDate}T${schedTime}:00`,
+                          notes: doctorNotes,
+                        })
+                      }
+                    >
+                      {scheduleMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Update Appointment
+                    </Button>
+                  </div>
+                </details>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Post-appointment notes
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={doctorNotes}
+                    onChange={(e) => setDoctorNotes(e.target.value)}
+                    placeholder="Write your clinical summary or follow-up recommendations..."
+                    className="w-full border border-surface-border rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+
+                {reviewMutation.isError && (
+                  <p className="text-xs text-red-600">
+                    Failed to complete. Please try again.
+                  </p>
+                )}
+
                 <Button
-                  className="flex-1"
+                  className="w-full"
+                  disabled={reviewMutation.isPending}
+                  onClick={() =>
+                    reviewMutation.mutate({
+                      id: selected.id,
+                      notes: doctorNotes,
+                    })
+                  }
+                >
+                  {reviewMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                  )}
+                  Mark Appointment Complete
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            /* PENDING: scheduling form */
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm uppercase tracking-wider text-slate-500">
+                  Set Appointment Date &amp; Time
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={schedDate}
+                    min={minDate.toISOString().split("T")[0]}
+                    onChange={(e) => setSchedDate(e.target.value)}
+                    className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Time
+                  </label>
+                  <input
+                    type="time"
+                    value={schedTime}
+                    onChange={(e) => setSchedTime(e.target.value)}
+                    className="w-full border border-surface-border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Doctor Notes (shown to patient)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={doctorNotes}
+                    onChange={(e) => setDoctorNotes(e.target.value)}
+                    placeholder="Add any pre-appointment guidance or notes for the patient..."
+                    className="w-full border border-surface-border rounded-lg p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  />
+                </div>
+                {scheduleMutation.isError && (
+                  <p className="text-xs text-red-600">
+                    Failed to schedule. Please try again.
+                  </p>
+                )}
+                <Button
+                  className="w-full"
                   disabled={!schedDate || scheduleMutation.isPending}
                   onClick={() =>
                     scheduleMutation.mutate({
@@ -364,30 +512,9 @@ export function ReviewPortal() {
                   )}
                   Confirm Appointment
                 </Button>
-
-                {selected.status === "scheduled" && (
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    disabled={reviewMutation.isPending}
-                    onClick={() =>
-                      reviewMutation.mutate({
-                        id: selected.id,
-                        notes: doctorNotes,
-                      })
-                    }
-                  >
-                    {reviewMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                    )}
-                    Mark Reviewed
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     );

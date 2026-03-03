@@ -25,33 +25,36 @@ export function ConsultationBooking() {
   const [isBooked, setIsBooked] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch the patient's most recent completed analysis to link to consultation
-  const { data: latestAnalysis } = useQuery({
-    queryKey: ["latest-analysis"],
+  // Find most recent upload + any linked analysis (analysis may still be processing)
+  const { data: latestUpload } = useQuery({
+    queryKey: ["latest-upload"],
     queryFn: async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
 
+      // Accept any upload that's been sent to storage (uploaded, processing, or complete)
       const { data: uploads } = await supabase
         .from("uploads")
-        .select("id")
+        .select("id, status")
         .eq("user_id", user.id)
-        .eq("status", "complete")
+        .in("status", ["uploaded", "processing", "complete"])
         .order("created_at", { ascending: false })
         .limit(1);
 
       if (!uploads?.length) return null;
 
+      // Try to find an analysis, but it's optional
       const { data: analysis } = await supabase
         .from("analysis_results")
-        .select("id, risk_level, confidence, summary")
+        .select("id, risk_level, confidence, summary, status")
         .eq("upload_id", uploads[0].id)
-        .eq("status", "complete")
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      return analysis;
+      return { uploadId: uploads[0].id, analysis };
     },
   });
 
@@ -84,7 +87,7 @@ export function ConsultationBooking() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedDate || !selectedTime || !latestAnalysis) return;
+    if (!selectedDate || !selectedTime || !latestUpload) return;
     setIsSubmitting(true);
     setError(null);
 
@@ -96,12 +99,12 @@ export function ConsultationBooking() {
 
       const { error: insertErr } = await supabase.from("consultations").insert({
         patient_id: user.id,
-        analysis_id: latestAnalysis.id,
+        analysis_id: latestUpload.analysis?.id ?? null,
         status: "pending",
         urgency:
-          latestAnalysis.risk_level === "HIGH"
+          latestUpload.analysis?.risk_level === "HIGH"
             ? "HIGH"
-            : latestAnalysis.risk_level === "CRITICAL"
+            : latestUpload.analysis?.risk_level === "CRITICAL"
               ? "CRITICAL"
               : "ROUTINE",
         patient_notes: notes || null,
@@ -164,24 +167,37 @@ export function ConsultationBooking() {
         </p>
       </div>
 
-      {/* Linked analysis */}
-      {latestAnalysis && (
+      {/* Linked analysis — shown if analysis exists */}
+      {latestUpload?.analysis && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
           <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0" />
           <p className="text-sm text-blue-800">
             This consultation will be linked to your most recent analysis —{" "}
-            <strong>Risk: {latestAnalysis.risk_level}</strong> (
-            {((latestAnalysis.confidence ?? 0) * 100).toFixed(0)}% confidence)
+            <strong>Risk: {latestUpload.analysis.risk_level}</strong> (
+            {((latestUpload.analysis.confidence ?? 0) * 100).toFixed(0)}%
+            confidence)
           </p>
         </div>
       )}
 
-      {!latestAnalysis && (
+      {/* Upload found but no analysis yet */}
+      {latestUpload && !latestUpload.analysis && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0" />
+          <p className="text-sm text-blue-800">
+            Your uploaded image has been found. The AI analysis may still be
+            processing — your consultation request will be linked once it
+            completes.
+          </p>
+        </div>
+      )}
+
+      {/* No upload at all */}
+      {!latestUpload && (
         <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
           <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
           <p className="text-sm text-amber-800">
-            No completed analysis found. Please upload and analyse a skin image
-            before booking.
+            No uploaded image found. Please upload a skin image before booking.
           </p>
         </div>
       )}
@@ -286,7 +302,7 @@ export function ConsultationBooking() {
         <Button
           size="lg"
           disabled={
-            !selectedDate || !selectedTime || !latestAnalysis || isSubmitting
+            !selectedDate || !selectedTime || !latestUpload || isSubmitting
           }
           onClick={handleSubmit}
         >

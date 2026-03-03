@@ -1,37 +1,239 @@
+import { useState } from "react";
+import {
+  Users,
+  Search,
+  ChevronRight,
+  AlertTriangle,
+  CheckCircle,
+  Calendar,
+  Loader2,
+  Clock,
+} from "lucide-react";
 import { Card, CardContent } from "../../components/core/Card";
-import { Users } from "lucide-react";
+import { cn } from "../../utils/cn";
+import { supabase } from "../../config/supabase";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
+// ── Types ──────────────────────────────────────────────────────
+interface PatientRecord {
+  patientId: string;
+  fullName: string;
+  lastRiskLevel: string | null;
+  lastConsultDate: string | null;
+  totalConsults: number;
+  hasOngoing: boolean; // has a pending/scheduled consultation right now
+  latestNotes: string | null;
+}
+
+const RISK_COLORS: Record<string, string> = {
+  CRITICAL: "text-red-700 bg-red-50 ring-red-200",
+  HIGH: "text-orange-700 bg-orange-50 ring-orange-200",
+  MODERATE: "text-yellow-700 bg-yellow-50 ring-yellow-200",
+  LOW: "text-green-700 bg-green-50 ring-green-200",
+};
+
+// ── Component ──────────────────────────────────────────────────
 export function PatientList() {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+
+  const { data: patients = [], isLoading } = useQuery<PatientRecord[]>({
+    queryKey: ["doctor-patient-directory"],
+    queryFn: async () => {
+      // Fetch all consultations the doctor has ever touched (reviewed, scheduled, or pending)
+      const { data, error } = await supabase
+        .from("consultations")
+        .select(
+          `
+          id, status, created_at, doctor_notes,
+          scheduled_at,
+          patient:profiles!consultations_patient_id_fkey(id, full_name),
+          analysis:analysis_results(risk_level)
+        `,
+        )
+        .in("status", ["pending", "scheduled", "reviewed", "closed"])
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (!data) return [];
+
+      // Collapse per patient — de-duplicate by patient_id
+      const map = new Map<string, PatientRecord>();
+
+      for (const c of data as any[]) {
+        const p = c.patient;
+        if (!p) continue;
+        const id = p.id as string;
+
+        if (!map.has(id)) {
+          map.set(id, {
+            patientId: id,
+            fullName: p.full_name ?? "Unknown",
+            lastRiskLevel: c.analysis?.risk_level ?? null,
+            lastConsultDate: c.scheduled_at ?? c.created_at,
+            totalConsults: 1,
+            hasOngoing: ["pending", "scheduled"].includes(c.status),
+            latestNotes: c.doctor_notes ?? null,
+          });
+        } else {
+          const rec = map.get(id)!;
+          rec.totalConsults += 1;
+          if (["pending", "scheduled"].includes(c.status))
+            rec.hasOngoing = true;
+        }
+      }
+
+      return Array.from(map.values()).sort((a, b) => {
+        // Put ongoing cases first
+        if (a.hasOngoing !== b.hasOngoing) return a.hasOngoing ? -1 : 1;
+        return 0;
+      });
+    },
+    refetchInterval: 30_000,
+  });
+
+  const filtered = patients.filter((p) =>
+    p.fullName.toLowerCase().includes(search.toLowerCase()),
+  );
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 fade-in p-8 bg-surface-muted min-h-[calc(100vh-64px)]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+    <div className="max-w-5xl mx-auto p-6 space-y-6 fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900">
             Patient Directory
           </h1>
-          <p className="text-slate-500 mt-1">
-            Manage your active patients and their ongoing consultation history.
+          <p className="text-slate-500 text-sm mt-1">
+            Patients with active or reviewed consultations.
           </p>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center bg-white border border-surface-border rounded-lg px-3 py-2.5 shadow-sm max-w-xs w-full">
+          <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name…"
+            className="border-none focus:ring-0 text-sm flex-1 outline-none bg-transparent"
+          />
         </div>
       </div>
 
-      <Card className="text-center py-24 bg-white border border-surface-border shadow-sm">
-        <CardContent>
-          <div className="flex flex-col items-center justify-center text-slate-400 space-y-4">
-            <div className="bg-slate-50 p-6 rounded-full">
-              <Users className="w-16 h-16 text-slate-300" />
+      {/* Content */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20 text-slate-400">
+          <Loader2 className="h-6 w-6 animate-spin mr-2" />
+          Loading patients…
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="text-center py-20">
+          <CardContent>
+            <div className="flex flex-col items-center text-slate-400 space-y-4">
+              <div className="bg-slate-50 p-6 rounded-full">
+                <Users className="w-14 h-14 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-medium text-slate-600">
+                {search ? "No patients match your search" : "No patients yet"}
+              </h3>
+              <p className="max-w-sm text-sm text-center">
+                {search
+                  ? "Try a different name."
+                  : "Once you review cases from the triage portal, patients will appear here."}
+              </p>
+              {!search && (
+                <button
+                  onClick={() => navigate("/doctor")}
+                  className="mt-2 text-sm text-primary-600 underline font-medium"
+                >
+                  Go to Review Portal →
+                </button>
+              )}
             </div>
-            <h3 className="text-xl font-medium text-slate-600">
-              No active patients
-            </h3>
-            <p className="max-w-md mx-auto text-sm text-center">
-              Once you review cases from the triage portal and take them on for
-              ongoing management, they will appear here in your secure patient
-              directory.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((p) => (
+            <button
+              key={p.patientId}
+              onClick={() => navigate("/doctor")}
+              className="w-full text-left bg-white border border-surface-border rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-all group"
+            >
+              {/* Avatar */}
+              <div className="w-11 h-11 rounded-full bg-primary-100 text-primary-700 font-bold text-lg flex items-center justify-center shrink-0 uppercase">
+                {p.fullName.charAt(0)}
+              </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-900">
+                    {p.fullName}
+                  </span>
+
+                  {p.hasOngoing && (
+                    <span className="text-xs bg-amber-100 text-amber-700 ring-1 ring-amber-200 px-2 py-0.5 rounded-full font-medium">
+                      Active case
+                    </span>
+                  )}
+
+                  {p.lastRiskLevel && (
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-0.5 rounded-full font-medium ring-1",
+                        RISK_COLORS[p.lastRiskLevel] ??
+                          "bg-slate-100 text-slate-600",
+                      )}
+                    >
+                      {p.lastRiskLevel}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {p.totalConsults} consultation
+                    {p.totalConsults !== 1 ? "s" : ""}
+                  </span>
+                  {p.lastConsultDate && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Last:{" "}
+                      {new Date(p.lastConsultDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  )}
+                </div>
+
+                {p.latestNotes && (
+                  <p className="text-xs text-slate-400 mt-1 italic truncate">
+                    "{p.latestNotes}"
+                  </p>
+                )}
+              </div>
+
+              {/* Status icon */}
+              <div className="shrink-0">
+                {p.hasOngoing ? (
+                  <AlertTriangle className="h-5 w-5 text-amber-400" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 text-green-400" />
+                )}
+              </div>
+
+              <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

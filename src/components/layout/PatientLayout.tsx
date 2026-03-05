@@ -4,6 +4,7 @@ import { supabase } from "../../config/supabase";
 import { Button } from "../core/Button";
 import { LogOut, Activity, UploadCloud, FileText, Menu, X } from "lucide-react";
 import { cn } from "../../utils/cn";
+import { IncomingCallListener } from "../shared/IncomingCallListener";
 
 export function PatientLayout() {
   const navigate = useNavigate();
@@ -119,7 +120,8 @@ export function PatientLayout() {
         )}
       </nav>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 relative">
+        <IncomingCallListener />
         <Outlet />
       </main>
     </div>

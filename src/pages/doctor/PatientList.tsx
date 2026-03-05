@@ -8,21 +8,25 @@ import {
   Calendar,
   Loader2,
   Clock,
+  Video,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/core/Card";
+import { Button } from "../../components/core/Button";
 import { cn } from "../../utils/cn";
 import { supabase } from "../../config/supabase";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { VideoCallRoom } from "../../components/shared/VideoCallRoom";
 
 // ── Types ──────────────────────────────────────────────────────
 interface PatientRecord {
   patientId: string;
   fullName: string;
+  consultationId: string; // most recent consultation — used as call channel
   lastRiskLevel: string | null;
   lastConsultDate: string | null;
   totalConsults: number;
-  hasOngoing: boolean; // has a pending/scheduled consultation right now
+  hasOngoing: boolean;
   latestNotes: string | null;
 }
 
@@ -37,17 +41,16 @@ const RISK_COLORS: Record<string, string> = {
 export function PatientList() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [callPatient, setCallPatient] = useState<PatientRecord | null>(null);
 
   const { data: patients = [], isLoading } = useQuery<PatientRecord[]>({
     queryKey: ["doctor-patient-directory"],
     queryFn: async () => {
-      // Fetch all consultations the doctor has ever touched (reviewed, scheduled, or pending)
       const { data, error } = await supabase
         .from("consultations")
         .select(
           `
-          id, status, created_at, doctor_notes,
-          scheduled_at,
+          id, status, created_at, doctor_notes, scheduled_at,
           patient:profiles!consultations_patient_id_fkey(id, full_name),
           analysis:analysis_results(risk_level)
         `,
@@ -58,7 +61,6 @@ export function PatientList() {
       if (error) throw error;
       if (!data) return [];
 
-      // Collapse per patient — de-duplicate by patient_id
       const map = new Map<string, PatientRecord>();
 
       for (const c of data as any[]) {
@@ -70,6 +72,7 @@ export function PatientList() {
           map.set(id, {
             patientId: id,
             fullName: p.full_name ?? "Unknown",
+            consultationId: c.id,
             lastRiskLevel: c.analysis?.risk_level ?? null,
             lastConsultDate: c.scheduled_at ?? c.created_at,
             totalConsults: 1,
@@ -84,11 +87,9 @@ export function PatientList() {
         }
       }
 
-      return Array.from(map.values()).sort((a, b) => {
-        // Put ongoing cases first
-        if (a.hasOngoing !== b.hasOngoing) return a.hasOngoing ? -1 : 1;
-        return 0;
-      });
+      return Array.from(map.values()).sort((a, b) =>
+        a.hasOngoing === b.hasOngoing ? 0 : a.hasOngoing ? -1 : 1,
+      );
     },
     refetchInterval: 30_000,
   });
@@ -96,6 +97,19 @@ export function PatientList() {
   const filtered = patients.filter((p) =>
     p.fullName.toLowerCase().includes(search.toLowerCase()),
   );
+
+  // ── Video call active ────────────────────────────────────────
+  if (callPatient) {
+    return (
+      <VideoCallRoom
+        consultationId={callPatient.consultationId}
+        role="doctor"
+        otherPartyName={callPatient.fullName}
+        autoStart
+        onClose={() => setCallPatient(null)}
+      />
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6 fade-in">
@@ -109,8 +123,6 @@ export function PatientList() {
             Patients with active or reviewed consultations.
           </p>
         </div>
-
-        {/* Search */}
         <div className="flex items-center bg-white border border-surface-border rounded-lg px-3 py-2.5 shadow-sm max-w-xs w-full">
           <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
           <input
@@ -158,10 +170,9 @@ export function PatientList() {
       ) : (
         <div className="space-y-3">
           {filtered.map((p) => (
-            <button
+            <div
               key={p.patientId}
-              onClick={() => navigate("/doctor")}
-              className="w-full text-left bg-white border border-surface-border rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-all group"
+              className="bg-white border border-surface-border rounded-xl p-4 flex items-center gap-4"
             >
               {/* Avatar */}
               <div className="w-11 h-11 rounded-full bg-primary-100 text-primary-700 font-bold text-lg flex items-center justify-center shrink-0 uppercase">
@@ -169,18 +180,19 @@ export function PatientList() {
               </div>
 
               {/* Info */}
-              <div className="flex-1 min-w-0">
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => navigate("/doctor")}
+              >
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-slate-900">
                     {p.fullName}
                   </span>
-
                   {p.hasOngoing && (
                     <span className="text-xs bg-amber-100 text-amber-700 ring-1 ring-amber-200 px-2 py-0.5 rounded-full font-medium">
                       Active case
                     </span>
                   )}
-
                   {p.lastRiskLevel && (
                     <span
                       className={cn(
@@ -193,7 +205,6 @@ export function PatientList() {
                     </span>
                   )}
                 </div>
-
                 <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
@@ -212,25 +223,37 @@ export function PatientList() {
                     </span>
                   )}
                 </div>
+              </div>
 
-                {p.latestNotes && (
-                  <p className="text-xs text-slate-400 mt-1 italic truncate">
-                    "{p.latestNotes}"
-                  </p>
-                )}
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => setCallPatient(p)}
+                  className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Video className="h-3.5 w-3.5" />
+                  Call
+                </Button>
+
+                <button
+                  onClick={() => navigate("/doctor")}
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="View consultation"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
               </div>
 
               {/* Status icon */}
               <div className="shrink-0">
                 {p.hasOngoing ? (
-                  <AlertTriangle className="h-5 w-5 text-amber-400" />
+                  <AlertTriangle className="h-4 w-4 text-amber-400" />
                 ) : (
-                  <CheckCircle className="h-5 w-5 text-green-400" />
+                  <CheckCircle className="h-4 w-4 text-green-400" />
                 )}
               </div>
-
-              <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
-            </button>
+            </div>
           ))}
         </div>
       )}

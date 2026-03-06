@@ -1,9 +1,29 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../core/Button";
-import { ShieldPlus } from "lucide-react";
+import { ShieldPlus, Activity } from "lucide-react";
 import { motion } from "framer-motion";
+import { supabase } from "../../config/supabase";
 
 export function PublicNavbar() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+      setUserRole(session?.user?.user_metadata?.role || "patient");
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+      setUserRole(session?.user?.user_metadata?.role || "patient");
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
   return (
     <motion.nav
       initial={{ y: -100 }}
@@ -25,15 +45,34 @@ export function PublicNavbar() {
             </span>
           </Link>
           <div className="flex items-center space-x-4">
-            <Link
-              to="/login"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              Log In
-            </Link>
-            <Link to="/register">
-              <Button>Start Free Screening</Button>
-            </Link>
+            {isAuthenticated === null ? (
+              <div className="h-10 w-24 bg-slate-100 animate-pulse rounded-md" />
+            ) : isAuthenticated ? (
+              <Link to={userRole === "doctor" ? "/doctor" : "/patient"}>
+                <Button>
+                  <Activity className="w-4 h-4 mr-2" />
+                  Go to {userRole === "doctor" ? "Portal" : "Dashboard"}
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/doctor/login"
+                  className="text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors mr-2"
+                >
+                  Doctor Portal
+                </Link>
+                <Link
+                  to="/login"
+                  className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                >
+                  Log In
+                </Link>
+                <Link to="/register">
+                  <Button>Start Free Screening</Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>

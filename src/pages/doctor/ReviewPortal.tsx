@@ -8,7 +8,11 @@ import {
   X,
   Loader2,
   User,
+  MessageSquare,
+  Video,
 } from "lucide-react";
+import { SecureTextChat } from "../../components/shared/SecureTextChat";
+import { VideoCallRoom } from "../../components/shared/VideoCallRoom";
 import {
   Card,
   CardContent,
@@ -70,6 +74,8 @@ function formatRelative(iso: string) {
 export function ReviewPortal() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Consultation | null>(null);
+  const [chatConsult, setChatConsult] = useState<Consultation | null>(null);
+  const [callConsult, setCallConsult] = useState<Consultation | null>(null);
 
   // Scheduling state
   const [schedDate, setSchedDate] = useState("");
@@ -176,6 +182,37 @@ export function ReviewPortal() {
     ).length,
   };
 
+  // ── Call overlay ──────────────────────────────────────────
+  if (callConsult) {
+    const patientName = callConsult.patient?.full_name ?? "Patient";
+    return (
+      <VideoCallRoom
+        consultationId={callConsult.id}
+        role="doctor"
+        otherPartyName={patientName}
+        onClose={() => setCallConsult(null)}
+        autoStart={true}
+      />
+    );
+  }
+
+  // ── Chat overlay ──────────────────────────────────────────
+  if (chatConsult) {
+    const patientName = chatConsult.patient?.full_name ?? "Patient";
+    return (
+      <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 fade-in">
+        <div className="w-full max-w-3xl h-[80vh] shadow-2xl rounded-2xl overflow-hidden">
+          <SecureTextChat
+            consultationId={chatConsult.id}
+            role="doctor"
+            otherPartyName={patientName}
+            onClose={() => setChatConsult(null)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // ── Scheduling panel ─────────────────────────────────────────
   if (selected) {
     const analysis = selected.analysis;
@@ -196,6 +233,22 @@ export function ReviewPortal() {
                 {selected.patient?.full_name ?? "Unknown"}
               </span>
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCallConsult(selected)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200 transition-colors"
+            >
+              <Video className="h-3.5 w-3.5" />
+              Call Patient
+            </button>
+            <button
+              onClick={() => setChatConsult(selected)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Message Patient
+            </button>
           </div>
           <button
             onClick={() => setSelected(null)}
@@ -680,6 +733,18 @@ export function ReviewPortal() {
                     </p>
                   )}
                 </div>
+
+                {/* Chat shortcut */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setChatConsult(c);
+                  }}
+                  className="shrink-0 p-2 rounded-full text-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  title="Message Patient"
+                >
+                  <MessageSquare className="h-5 w-5" />
+                </button>
 
                 <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-slate-500 shrink-0 transition-colors" />
               </button>

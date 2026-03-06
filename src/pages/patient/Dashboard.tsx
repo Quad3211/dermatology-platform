@@ -17,11 +17,13 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Video,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../../config/supabase";
 import { cn } from "../../utils/cn";
 import { SecureTextChat } from "../../components/shared/SecureTextChat";
+import { VideoCallRoom } from "../../components/shared/VideoCallRoom";
 
 // ── Types ──────────────────────────────────────────────────────
 interface Consultation {
@@ -43,6 +45,7 @@ const RISK_COLORS: Record<string, string> = {
 
 export function Dashboard() {
   const [chatConsult, setChatConsult] = useState<Consultation | null>(null);
+  const [callConsult, setCallConsult] = useState<Consultation | null>(null);
 
   const { data: consultations = [], isLoading } = useQuery<Consultation[]>({
     queryKey: ["patient-consultations"],
@@ -68,6 +71,23 @@ export function Dashboard() {
       return (data as any[]) || [];
     },
   });
+
+  // ── Call View Active ──────────────────────────────────────────
+  if (callConsult) {
+    const doctorName = callConsult.doctor?.full_name
+      ? `Dr. ${callConsult.doctor.full_name.replace(/^Dr\.\s*/i, "")}`
+      : "Your Doctor";
+
+    return (
+      <VideoCallRoom
+        consultationId={callConsult.id}
+        role="patient"
+        otherPartyName={doctorName}
+        onClose={() => setCallConsult(null)}
+        autoStart={true}
+      />
+    );
+  }
 
   // ── Chat View Active ──────────────────────────────────────────
   if (chatConsult) {
@@ -287,13 +307,22 @@ export function Dashboard() {
 
                     <div className="bg-slate-50 p-5 lg:p-6 border-t md:border-t-0 md:border-l border-surface-border flex flex-col justify-center gap-3 w-full md:w-48 shrink-0">
                       {isScheduledOrReviewed ? (
-                        <Button
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                          onClick={() => setChatConsult(c)}
-                        >
-                          <MessageSquare className="h-4 w-4 mr-2" />
-                          Message Dr.
-                        </Button>
+                        <>
+                          <Button
+                            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                            onClick={() => setCallConsult(c)}
+                          >
+                            <Video className="h-4 w-4 mr-2" />
+                            Call Doctor
+                          </Button>
+                          <Button
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={() => setChatConsult(c)}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            Message Dr.
+                          </Button>
+                        </>
                       ) : (
                         <Link to="/patient/consultation">
                           <Button className="w-full">

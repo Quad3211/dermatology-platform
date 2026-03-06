@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Loader2,
   AlertTriangle,
+  UploadCloud,
 } from "lucide-react";
 import {
   Card,
@@ -16,6 +17,7 @@ import { Button } from "../../components/core/Button";
 import { cn } from "../../utils/cn";
 import { supabase } from "../../config/supabase";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 export function ConsultationBooking() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -87,7 +89,14 @@ export function ConsultationBooking() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedDate || !selectedTime || !latestUpload) return;
+    // Guard — analysis_id is NOT NULL in schema; block if missing
+    if (!selectedDate || !selectedTime) return;
+    if (!latestUpload?.analysis?.id) {
+      setError(
+        "No completed analysis found. Please upload and wait for analysis before booking.",
+      );
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
 
@@ -99,7 +108,7 @@ export function ConsultationBooking() {
 
       const { error: insertErr } = await supabase.from("consultations").insert({
         patient_id: user.id,
-        analysis_id: latestUpload.analysis?.id ?? null,
+        analysis_id: latestUpload.analysis.id, // guaranteed non-null here
         status: "pending",
         urgency:
           latestUpload.analysis?.risk_level === "HIGH"
@@ -147,9 +156,9 @@ export function ConsultationBooking() {
             <br />A doctor will confirm or adjust the time based on
             availability.
           </p>
-          <Button onClick={() => (window.location.href = "/patient")}>
-            Return to Dashboard
-          </Button>
+          <Link to="/patient">
+            <Button>Return to Dashboard</Button>
+          </Link>
         </CardContent>
       </Card>
     );
@@ -192,13 +201,40 @@ export function ConsultationBooking() {
         </div>
       )}
 
-      {/* No upload at all */}
+      {/* No analysis yet — must upload first */}
       {!latestUpload && (
-        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-          <p className="text-sm text-amber-800">
-            No uploaded image found. Please upload a skin image before booking.
-          </p>
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              No uploaded image found.
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              You must upload a skin image and wait for analysis before booking.
+            </p>
+            <Link
+              to="/patient/upload"
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-amber-800 underline"
+            >
+              <UploadCloud className="h-3.5 w-3.5" /> Go to Upload
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Upload exists but analysis still processing */}
+      {latestUpload && !latestUpload.analysis && (
+        <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-blue-800">
+              AI Analysis Still Processing
+            </p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              Your uploaded image is being analysed. Please wait a moment and
+              refresh this page.
+            </p>
+          </div>
         </div>
       )}
 
@@ -302,7 +338,11 @@ export function ConsultationBooking() {
         <Button
           size="lg"
           disabled={
-            !selectedDate || !selectedTime || !latestUpload || isSubmitting
+            !selectedDate ||
+            !selectedTime ||
+            !latestUpload ||
+            !latestUpload.analysis?.id ||
+            isSubmitting
           }
           onClick={handleSubmit}
         >

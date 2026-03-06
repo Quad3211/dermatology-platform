@@ -9,6 +9,7 @@ import {
   Loader2,
   Clock,
   Video,
+  MessageSquare,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/core/Card";
 import { Button } from "../../components/core/Button";
@@ -17,6 +18,7 @@ import { supabase } from "../../config/supabase";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { VideoCallRoom } from "../../components/shared/VideoCallRoom";
+import { SecureTextChat } from "../../components/shared/SecureTextChat";
 
 // ── Types ──────────────────────────────────────────────────────
 interface PatientRecord {
@@ -42,6 +44,7 @@ export function PatientList() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [callPatient, setCallPatient] = useState<PatientRecord | null>(null);
+  const [chatPatient, setChatPatient] = useState<PatientRecord | null>(null);
 
   const { data: patients = [], isLoading } = useQuery<PatientRecord[]>({
     queryKey: ["doctor-patient-directory"],
@@ -108,6 +111,22 @@ export function PatientList() {
         autoStart
         onClose={() => setCallPatient(null)}
       />
+    );
+  }
+
+  // ── Chat active ──────────────────────────────────────────────
+  if (chatPatient) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 fade-in">
+        <div className="w-full max-w-3xl h-[80vh] shadow-2xl rounded-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+          <SecureTextChat
+            consultationId={chatPatient.consultationId}
+            role="doctor"
+            otherPartyName={chatPatient.fullName}
+            onClose={() => setChatPatient(null)}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -227,6 +246,15 @@ export function PatientList() {
 
               {/* Actions */}
               <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setChatPatient(p)}
+                  className="flex items-center gap-1.5 text-slate-700 bg-white"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Chat
+                </Button>
                 <Button
                   size="sm"
                   onClick={() => setCallPatient(p)}

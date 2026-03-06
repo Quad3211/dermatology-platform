@@ -35,12 +35,15 @@ export function DoctorLayout() {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className=" flex-shrink-0 flex items-center">
-                <span className="text-xl font-bold text-primary-600">
+                <Link
+                  to="/"
+                  className="text-xl font-bold text-primary-600 hover:text-primary-700 transition-colors flex items-center"
+                >
                   SkinHealth{" "}
-                  <span className="text-sm font-normal text-slate-500 ml-1 border-l pl-2 border-slate-300">
+                  <span className="text-sm font-normal text-slate-500 ml-2 border-l pl-2 border-slate-300">
                     Doctor Portal
                   </span>
-                </span>
+                </Link>
               </div>
               <div className="hidden sm:-my-px sm:ml-8 sm:flex sm:space-x-8">
                 {navLinks.map((link) => {

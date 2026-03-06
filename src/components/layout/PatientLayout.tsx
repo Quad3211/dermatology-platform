@@ -29,9 +29,12 @@ export function PatientLayout() {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className=" flex-shrink-0 flex items-center">
-                <span className="text-xl font-bold text-primary-600">
+                <Link
+                  to="/"
+                  className="text-xl font-bold text-primary-600 hover:text-primary-700 transition-colors"
+                >
                   SkinHealth
-                </span>
+                </Link>
               </div>
               <div className="hidden sm:-my-px sm:ml-8 sm:flex sm:space-x-8">
                 {navLinks.map((link) => {

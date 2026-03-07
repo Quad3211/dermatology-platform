@@ -33,6 +33,9 @@ export function AuthLayout() {
 
   // If already authenticated, redirect away from auth pages
   if (isAuthenticated) {
+    if (userRole === "admin") {
+      return <Navigate to="/admin" replace />;
+    }
     return (
       <Navigate to={userRole === "doctor" ? "/doctor" : "/patient"} replace />
     );

@@ -10,6 +10,9 @@ export function DoctorRegister() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [specialty, setSpecialty] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -18,6 +21,9 @@ export function DoctorRegister() {
     e.preventDefault();
     if (password !== confirmPassword) {
       return setError("Passwords do not match");
+    }
+    if (!fullName || !licenseNumber || !specialty) {
+      return setError("Please fill in all professional details");
     }
 
     setIsLoading(true);
@@ -30,6 +36,9 @@ export function DoctorRegister() {
         options: {
           data: {
             role: "doctor",
+            full_name: fullName,
+            license_number: licenseNumber,
+            specialty,
           },
         },
       });
@@ -116,6 +125,14 @@ export function DoctorRegister() {
 
           <form onSubmit={handleRegister} className="space-y-5">
             <Input
+              label="Full Name"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Dr. Jane Doe"
+              required
+            />
+            <Input
               label="Email Address"
               type="email"
               value={email}
@@ -123,6 +140,24 @@ export function DoctorRegister() {
               placeholder="doctor@example.com"
               required
             />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Medical License #"
+                type="text"
+                value={licenseNumber}
+                onChange={(e) => setLicenseNumber(e.target.value)}
+                placeholder="MD-123456"
+                required
+              />
+              <Input
+                label="Specialty"
+                type="text"
+                value={specialty}
+                onChange={(e) => setSpecialty(e.target.value)}
+                placeholder="Dermatology"
+                required
+              />
+            </div>
             <Input
               label="Password"
               type="password"

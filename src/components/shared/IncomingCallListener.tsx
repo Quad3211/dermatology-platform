@@ -10,21 +10,23 @@ import { Phone, PhoneOff } from "lucide-react";
 // This avoids the race condition where VideoCallRoom subscribes too late.
 function ConsultationCallListener({
   consultationId,
-  doctorName,
+  role,
+  otherPartyName,
 }: {
   consultationId: string;
-  doctorName: string;
+  role: "doctor" | "patient";
+  otherPartyName: string;
 }) {
   const [showIncoming, setShowIncoming] = useState(false);
   const [showRoom, setShowRoom] = useState(false);
-  const [callerName, setCallerName] = useState(doctorName);
+  const [callerName, setCallerName] = useState(otherPartyName);
 
   const handleIncomingCall = useCallback(
     (name: string) => {
-      setCallerName(name || doctorName);
+      setCallerName(name || otherPartyName);
       setShowIncoming(true);
     },
-    [doctorName],
+    [otherPartyName],
   );
 
   const handleCallEnded = useCallback(() => {
@@ -32,14 +34,14 @@ function ConsultationCallListener({
     setShowRoom(false);
   }, []);
 
-  // Mount the WebRTC hook immediately so it is subscribed to the
-  // signaling channel before the doctor sends the offer.
-  const { callState, acceptCall, endCall } = useWebRTC({
+  const webRtcState = useWebRTC({
     consultationId,
-    role: "patient",
+    role, // pass dynamic role down
     onIncomingCall: handleIncomingCall,
     onCallEnded: handleCallEnded,
   });
+
+  const { callState, acceptCall, endCall } = webRtcState;
 
   // Auto-dismiss incoming UI if doctor hung up
   useEffect(() => {
@@ -63,13 +65,14 @@ function ConsultationCallListener({
     return (
       <VideoCallRoom
         consultationId={consultationId}
-        role="patient"
+        role={role}
         otherPartyName={callerName}
         onClose={() => {
           setShowRoom(false);
           endCall();
         }}
         autoStart={false}
+        webRtcState={webRtcState}
       />
     );
   }
@@ -115,10 +118,13 @@ function ConsultationCallListener({
   return null;
 }
 
-// ── Root listener — mounts one listener per active consultation ─
-export function IncomingCallListener() {
+export function IncomingCallListener({
+  role = "patient",
+}: {
+  role?: "doctor" | "patient";
+}) {
   const [consultations, setConsultations] = useState<
-    { id: string; doctorName: string }[]
+    { id: string; otherPartyName: string }[]
   >([]);
 
   useEffect(() => {
@@ -130,10 +136,16 @@ export function IncomingCallListener() {
       } = await supabase.auth.getUser();
       if (!user || !mounted) return;
 
+      const columnFilter = role === "patient" ? "patient_id" : "doctor_id";
+      const selectQuery =
+        role === "patient"
+          ? `id, profiles:consultations_doctor_id_fkey(full_name)`
+          : `id, profiles:consultations_patient_id_fkey(full_name)`;
+
       const { data } = await supabase
         .from("consultations")
-        .select(`id, doctor:profiles!consultations_doctor_id_fkey(full_name)`)
-        .eq("patient_id", user.id)
+        .select(selectQuery)
+        .eq(columnFilter, user.id)
         .in("status", ["pending", "scheduled", "reviewed"]);
 
       if (!mounted || !data) return;
@@ -141,9 +153,13 @@ export function IncomingCallListener() {
       setConsultations(
         (data as any[]).map((c) => ({
           id: c.id,
-          doctorName: c.doctor?.full_name
-            ? `Dr. ${(c.doctor.full_name as string).replace(/^Dr\.\s*/i, "")}`
-            : "Your Doctor",
+          otherPartyName: c.profiles?.full_name
+            ? role === "patient"
+              ? `Dr. ${(c.profiles.full_name as string).replace(/^Dr\.\s*/i, "")}`
+              : (c.profiles.full_name as string)
+            : role === "patient"
+              ? "Your Doctor"
+              : "Patient",
         })),
       );
     };
@@ -154,15 +170,14 @@ export function IncomingCallListener() {
     };
   }, []);
 
-  // Render one listener per consultation — each mounts its own useWebRTC
-  // so the signaling channel is live before any call arrives.
   return (
     <>
       {consultations.map((c) => (
         <ConsultationCallListener
           key={c.id}
           consultationId={c.id}
-          doctorName={c.doctorName}
+          role={role}
+          otherPartyName={c.otherPartyName}
         />
       ))}
     </>

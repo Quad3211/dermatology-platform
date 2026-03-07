@@ -27,8 +27,13 @@ export function PatientLogin() {
       if (error) throw error;
 
       const userRole = data.user.user_metadata?.role || "patient";
-      if (userRole === "doctor") {
-        navigate("/doctor");
+      if (userRole === "admin") {
+        navigate("/admin");
+      } else if (userRole === "doctor") {
+        await supabase.auth.signOut();
+        throw new Error(
+          "This login is for patients. Please use the Doctor Portal.",
+        );
       } else {
         navigate("/patient");
       }

@@ -3,10 +3,10 @@ import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../../config/supabase";
 import { Button } from "../../components/core/Button";
 import { Input } from "../../components/core/Input";
-import { Activity, Lock, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, Activity, KeyRound } from "lucide-react";
 import { motion } from "framer-motion";
 
-export function DoctorLogin() {
+export function AdminLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -26,16 +26,14 @@ export function DoctorLogin() {
 
       if (error) throw error;
 
-      const userRole = data.user.user_metadata?.role || "patient";
-      if (userRole === "admin") {
-        navigate("/admin");
-      } else if (userRole !== "doctor") {
+      const userRole = data.user.user_metadata?.role;
+      if (userRole !== "admin") {
         await supabase.auth.signOut();
         throw new Error(
-          "This login is for medical professionals. Please use the Patient Portal.",
+          "Access Denied: This portal is strictly for system administrators.",
         );
       } else {
-        navigate("/doctor");
+        navigate("/admin");
       }
     } catch (err: any) {
       setError(err.message || "Failed to login");
@@ -45,13 +43,13 @@ export function DoctorLogin() {
   };
 
   return (
-    <div className="flex-1 flex flex-col md:flex-row w-full bg-white relative overflow-hidden">
+    <div className="flex-1 flex flex-col md:flex-row w-full bg-slate-900 relative overflow-hidden">
       {/* Background Splash */}
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: 0.5 }}
+        animate={{ opacity: 0.1 }}
         transition={{ duration: 0.8 }}
-        className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-100 rounded-full blur-[120px] pointer-events-none"
+        className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-400 rounded-full blur-[120px] pointer-events-none"
       />
 
       {/* Left side: Animated Themed Branding */}
@@ -62,41 +60,38 @@ export function DoctorLogin() {
           transition={{ duration: 0.5 }}
           className="relative z-10 flex flex-col h-full justify-center"
         >
-          <div className="bg-emerald-50 text-emerald-600 w-16 h-16 rounded-2xl flex items-center justify-center mb-8 shadow-sm">
-            <Activity className="w-8 h-8" />
+          <div className="bg-slate-800 text-emerald-400 w-16 h-16 rounded-2xl flex items-center justify-center mb-8 shadow-sm border border-slate-700">
+            <ShieldCheck className="w-8 h-8" />
           </div>
-          <h1 className="text-4xl lg:text-5xl font-extrabold text-slate-900 leading-[1.1] mb-6">
-            Advanced Tools. <br />
-            <span className="text-emerald-600">Clinical Focus.</span>
+          <h1 className="text-4xl lg:text-5xl font-extrabold text-white leading-[1.1] mb-6 tracking-tight">
+            System Operations. <br />
+            <span className="text-emerald-400">Secure Access.</span>
           </h1>
-          <p className="text-lg text-slate-600 max-w-lg mb-12">
-            Access your encrypted clinical dashboard. Review patient scans,
-            securely message cases, and manage your digitized practice with
-            ease.
+          <p className="text-lg text-slate-400 max-w-lg mb-12">
+            Access the administrative dashboard to monitor platform health,
+            verify medical credentials, and oversee system compliance.
           </p>
 
           <div className="space-y-6">
             <div className="flex items-center space-x-4">
-              <div className="bg-white p-3 rounded-full shadow-sm">
-                <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              <div className="bg-slate-800 p-3 rounded-full border border-slate-700">
+                <KeyRound className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900">Efficient Triage</h4>
-                <p className="text-sm text-slate-500">
-                  Pre-screened cases prioritized by urgency.
+                <h4 className="font-bold text-white">Strict Authentication</h4>
+                <p className="text-sm text-slate-400">
+                  Role-based access control with comprehensive audit logging.
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="bg-white p-3 rounded-full shadow-sm">
-                <Lock className="w-6 h-6 text-emerald-500" />
+              <div className="bg-slate-800 p-3 rounded-full border border-slate-700">
+                <Activity className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900">
-                  Encrypted Communications
-                </h4>
-                <p className="text-sm text-slate-500">
-                  Communicate securely with patients and peers.
+                <h4 className="font-bold text-white">Real-time Monitoring</h4>
+                <p className="text-sm text-slate-400">
+                  Observe and action critical events rapidly.
                 </p>
               </div>
             </div>
@@ -105,24 +100,24 @@ export function DoctorLogin() {
       </div>
 
       {/* Right side: Login Form */}
-      <div className="w-full md:w-1/2 bg-white flex flex-col justify-center items-center p-8 lg:p-12 relative z-20 border-l border-slate-100 shadow-[-10px_0_30px_rgba(0,0,0,0.02)]">
+      <div className="w-full md:w-1/2 bg-white flex flex-col justify-center items-center p-8 lg:p-12 relative z-20 border-l border-slate-800 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
         <div className="w-full max-w-md">
           <div className="text-center mb-10">
             <h3 className="text-2xl font-bold text-slate-900 mb-2">
-              Doctor Sign In
+              Admin Sign In
             </h3>
             <p className="text-slate-500 font-medium">
-              Welcome back to your clinical dashboard.
+              Enter your administrative credentials to continue.
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
-              label="Email Address"
+              label="Admin Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="doctor@example.com"
+              placeholder="admin@skinhealth.com"
               required
             />
             <div className="space-y-1">
@@ -130,12 +125,6 @@ export function DoctorLogin() {
                 <label className="text-sm font-medium text-slate-700">
                   Password
                 </label>
-                <a
-                  href="#"
-                  className="text-xs font-medium text-emerald-600 hover:underline"
-                >
-                  Forgot password?
-                </a>
               </div>
               <Input
                 type="password"
@@ -159,27 +148,17 @@ export function DoctorLogin() {
 
             <Button
               type="submit"
-              className="w-full text-lg h-12 rounded-xl transition-all shadow-lg font-bold bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+              className="w-full text-lg h-12 rounded-xl transition-all shadow-lg font-bold bg-slate-900 hover:bg-slate-800 text-white"
               isLoading={isLoading}
             >
-              Sign In to Practice
+              Access Operations
             </Button>
           </form>
 
-          <div className="text-center text-sm font-medium mt-8 text-slate-500">
-            Don't have a provider account?{" "}
-            <Link
-              to="/doctor/register"
-              className="text-emerald-600 hover:underline"
-            >
-              Request access
-            </Link>
-          </div>
-
           <div className="text-center text-sm font-medium mt-8 pt-8 border-t border-slate-100 text-slate-500">
-            Are you a patient?{" "}
+            Not an administrator?{" "}
             <Link to="/login" className="text-primary-600 hover:underline">
-              Patient Sign In
+              Return to Patient Portal
             </Link>
           </div>
         </div>

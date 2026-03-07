@@ -55,6 +55,17 @@ class AnalyzeResponse(BaseModel):
     analysis_id: str
 
 
+class AnalyzeSyncRequest(BaseModel):
+    image_url: str
+
+class AnalyzeSyncResponse(BaseModel):
+    risk_level: str
+    confidence: float
+    severity_score: float
+    summary: str
+    referral_required: bool
+    emergency_flag: bool
+
 # ── Endpoints ──────────────────────────────────────────────────
 @app.get("/health")
 async def health() -> dict:
@@ -86,6 +97,37 @@ async def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks) -> Ana
     background_tasks.add_task(run_pipeline, req)
     return AnalyzeResponse(status="queued", analysis_id=req.analysis_id)
 
+
+@app.post("/analyze-sync", response_model=AnalyzeSyncResponse)
+async def analyze_sync(req: AnalyzeSyncRequest) -> AnalyzeSyncResponse:
+    """
+    Synchronous analysis for public scanning without DB persistence.
+    """
+    try:
+        image_bytes = download_image(req.image_url)
+        validate_image(image_bytes)
+        
+        tensor_224, tensor_380, pil_image = preprocess_image(image_bytes)
+        detection = detect_lesions(tensor_380, pil_image)
+        risk_result = score_risk(tensor_224, detection)
+        
+        safe_result = apply_safety_gate(
+            raw_summary=risk_result.summary,
+            risk_level=risk_result.risk_level,
+            confidence=risk_result.confidence,
+        )
+        
+        return AnalyzeSyncResponse(
+            risk_level=risk_result.risk_level,
+            confidence=round(risk_result.confidence, 3),
+            severity_score=round(risk_result.severity_score, 1),
+            summary=safe_result.summary,
+            referral_required=safe_result.referral_required,
+            emergency_flag=safe_result.emergency_flag,
+        )
+    except Exception as e:
+        print(f"[Pipeline Sync] FAILED: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ── Pipeline orchestration ─────────────────────────────────────
 async def run_pipeline(req: AnalyzeRequest) -> None:

@@ -5,9 +5,11 @@ import {
   X,
   Image as ImageIcon,
   ShieldCheck,
+  Camera
 } from "lucide-react";
 import { Button } from "../core/Button";
 import { cn } from "../../utils/cn";
+import { CameraCapture } from "./CameraCapture";
 
 interface ImageUploaderProps {
   onUpload: (file: File) => Promise<void>;
@@ -18,6 +20,7 @@ export function ImageUploader({ onUpload, isUploading }: ImageUploaderProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState("");
+  const [useCamera, setUseCamera] = useState(false);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -78,44 +81,62 @@ export function ImageUploader({ onUpload, isUploading }: ImageUploaderProps) {
 
   return (
     <div className="w-full">
-      {!selectedFile ? (
-        <label
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          className={cn(
-            "relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-xl cursor-pointer transition-colors bg-surface-muted",
-            dragActive
-              ? "border-primary-500 bg-primary-50"
-              : "border-slate-300 hover:bg-slate-50",
-            error && "border-status-danger bg-red-50",
-          )}
-        >
-          <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center">
-            <UploadCloud
+      {useCamera ? (
+        <CameraCapture 
+            onCapture={(file) => {
+              setSelectedFile(file);
+              setUseCamera(false);
+            }} 
+            onClose={() => setUseCamera(false)} 
+        />
+      ) : !selectedFile ? (
+        <div className="w-full flex flex-col items-center">
+            <label
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
               className={cn(
-                "w-12 h-12 mb-4",
-                dragActive ? "text-primary-500" : "text-slate-400",
+                "relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-xl cursor-pointer transition-colors bg-surface-muted",
+                dragActive
+                  ? "border-primary-500 bg-primary-50"
+                  : "border-slate-300 hover:bg-slate-50",
+                error && "border-status-danger bg-red-50",
               )}
-            />
-            <p className="mb-2 text-sm text-slate-700">
-              <span className="font-semibold text-primary-600">
-                Click to upload
-              </span>{" "}
-              or drag and drop
-            </p>
-            <p className="text-xs text-slate-500">
-              Secure JPEG, PNG (MAX. 10MB)
-            </p>
-          </div>
-          <input
-            type="file"
-            className="hidden"
-            accept="image/jpeg, image/png, image/webp"
-            onChange={handleChange}
-          />
-        </label>
+            >
+              <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center">
+                <UploadCloud
+                  className={cn(
+                    "w-12 h-12 mb-4",
+                    dragActive ? "text-primary-500" : "text-slate-400",
+                  )}
+                />
+                <p className="mb-2 text-sm text-slate-700">
+                  <span className="font-semibold text-primary-600">
+                    Click to upload
+                  </span>{" "}
+                  or drag and drop
+                </p>
+                <p className="text-xs text-slate-500">
+                  Secure JPEG, PNG (MAX. 10MB)
+                </p>
+              </div>
+              <input
+                type="file"
+                className="hidden"
+                accept="image/jpeg, image/png, image/webp"
+                onChange={handleChange}
+              />
+            </label>
+            
+            <div className="mt-4 flex items-center justify-center">
+                <span className="text-slate-400 text-sm mr-4">or</span>
+                <Button variant="outline" onClick={() => setUseCamera(true)}>
+                    <Camera className="w-4 h-4 mr-2" />
+                    Take Photo
+                </Button>
+            </div>
+        </div>
       ) : (
         <div className="w-full rounded-xl border border-surface-border bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">

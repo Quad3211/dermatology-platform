@@ -5,10 +5,9 @@ In dev: Returns realistic stub output for testing the full pipeline.
 """
 import os
 import random
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass
+from typing import Any, List
 
-import torch
 from PIL import Image
 
 
@@ -41,6 +40,7 @@ def _load_model():
     global _model
     if _model is None and USE_REAL_MODEL:
         try:
+            import torch
             import torchvision.models as models
             _model = models.efficientnet_b4(weights=None)
             _model.classifier[1] = torch.nn.Linear(_model.classifier[1].in_features, 8)
@@ -51,7 +51,7 @@ def _load_model():
             print(f"[Lesion Detector] WARNING: Could not load model ({e}). Using stub.")
 
 
-def detect_lesions(tensor_380: torch.Tensor, pil_image: Image.Image) -> DetectionResult:
+def detect_lesions(tensor_380: Any, pil_image: Image.Image) -> DetectionResult:
     """
     Detects lesion region and computes ABCDE-based structural features.
 
@@ -97,10 +97,14 @@ def _stub_detect(pil_image: Image.Image) -> DetectionResult:
     )
 
 
-def _real_detect(tensor_380: torch.Tensor, pil_image: Image.Image) -> DetectionResult:
+def _real_detect(tensor_380: Any, pil_image: Image.Image) -> DetectionResult:
     """Real EfficientNet-B4 inference (production path)."""
+    import torch
+
+    model_input = _to_torch_batch(tensor_380, torch)
+
     with torch.no_grad():
-        logits = _model(tensor_380)  # type: ignore
+        logits = _model(model_input)  # type: ignore
         probs  = torch.softmax(logits, dim=1)
         confidence = float(probs.max().item())
 
@@ -114,3 +118,21 @@ def _real_detect(tensor_380: torch.Tensor, pil_image: Image.Image) -> DetectionR
         diameter_estimate=round(confidence * 12.0, 1),
         cnn_confidence=round(confidence, 3),
     )
+
+
+def _to_torch_batch(tensor_like: Any, torch_module: Any):
+    """
+    Ensures model input is a float32 NCHW torch tensor.
+    Allows preprocessors to return either numpy arrays or torch tensors.
+    """
+    if isinstance(tensor_like, torch_module.Tensor):
+        out = tensor_like
+    else:
+        import numpy as np
+
+        arr = np.asarray(tensor_like, dtype=np.float32)
+        out = torch_module.from_numpy(arr)
+
+    if out.ndim == 3:
+        out = out.unsqueeze(0)
+    return out.float()

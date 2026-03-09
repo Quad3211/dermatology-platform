@@ -32,30 +32,106 @@ export async function triggerAIPipeline(job: PipelineJob): Promise<void> {
       return;
     }
 
-    // POST to AI service
-    const response = await fetch(`${AI_SERVICE_URL}/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        analysis_id: job.analysisId,
-        upload_id: job.uploadId,
-        image_url: signedData.signedUrl,
-      }),
-      signal: AbortSignal.timeout(10_000), // 10s to accept job
+    const response = await postToAIService({
+      analysis_id: job.analysisId,
+      upload_id: job.uploadId,
+      image_url: signedData.signedUrl,
     });
 
     if (!response.ok) {
       const text = await response.text();
-      await markFailed(job.analysisId, `AI service rejected job: ${text}`);
+      await markFailed(
+        job.analysisId,
+        `AI service rejected job (${response.status}): ${text}`,
+      );
       return;
     }
 
     // Poll for result
     await pollForResult(job);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = describeFetchError(err);
     await markFailed(job.analysisId, `AI pipeline error: ${msg}`);
   }
+}
+
+type AnalyzeRequestPayload = {
+  analysis_id: string;
+  upload_id: string;
+  image_url: string;
+};
+
+async function postToAIService(payload: AnalyzeRequestPayload): Promise<Response> {
+  const candidateUrls = buildAIServiceUrls(AI_SERVICE_URL);
+  const attemptErrors: string[] = [];
+
+  for (const baseUrl of candidateUrls) {
+    try {
+      return await fetch(`${baseUrl}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10_000), // 10s to accept job
+      });
+    } catch (err) {
+      attemptErrors.push(`${baseUrl}: ${describeFetchError(err)}`);
+    }
+  }
+
+  throw new Error(attemptErrors.join(" | "));
+}
+
+function buildAIServiceUrls(baseUrl: string): string[] {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  const urls = [trimmed];
+
+  // On some dev setups localhost prefers IPv6 (::1). Add IPv4 fallback.
+  if (/^https?:\/\/localhost(?::|\/|$)/i.test(trimmed)) {
+    urls.push(trimmed.replace(/^((?:https?:\/\/))localhost/i, "$1127.0.0.1"));
+  }
+
+  return Array.from(new Set(urls));
+}
+
+function describeFetchError(err: unknown): string {
+  if (!(err instanceof Error)) {
+    return String(err);
+  }
+
+  const details: string[] = [];
+  const errorWithCause = err as Error & { cause?: unknown };
+  const cause = errorWithCause.cause;
+
+  if (cause instanceof AggregateError) {
+    for (const inner of cause.errors) {
+      const info = extractNetworkInfo(inner);
+      if (info) details.push(info);
+    }
+  } else {
+    const info = extractNetworkInfo(cause);
+    if (info) details.push(info);
+  }
+
+  return details.length > 0
+    ? `${err.message} (${details.join("; ")})`
+    : err.message;
+}
+
+function extractNetworkInfo(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+
+  const v = value as Record<string, unknown>;
+  const code = typeof v.code === "string" ? v.code : null;
+  const address = typeof v.address === "string" ? v.address : null;
+  const port =
+    typeof v.port === "number" || typeof v.port === "string"
+      ? String(v.port)
+      : null;
+
+  const hostPort = address && port ? `${address}:${port}` : address ?? port;
+  if (!code && !hostPort) return null;
+
+  return [code, hostPort].filter(Boolean).join(" ");
 }
 
 async function pollForResult(job: PipelineJob): Promise<void> {

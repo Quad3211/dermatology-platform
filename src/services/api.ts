@@ -24,18 +24,26 @@ export interface UploadResponse {
   disclaimer: string;
 }
 
+export type RiskLevel = "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+
 export interface AnalysisResponse {
-  id: string;
-  uploadId: string;
+  id?: string;
+  analysisId?: string;
+  uploadId?: string;
+  upload_id?: string;
   status: "queued" | "processing" | "complete" | "failed";
   progress?: number;
-  riskLevel?: "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+  riskLevel?: RiskLevel;
+  risk_level?: RiskLevel;
   confidence?: number;
   severityScore?: number;
+  severity_score?: number;
   summary?: string;
   disclaimer: string;
   referralRequired?: boolean;
+  referral_required?: boolean;
   emergencyFlag?: boolean;
+  emergency_flag?: boolean;
   xaiMetadata?: {
     gradcamUrl: string | null;
     attentionRegions: Array<{
@@ -48,8 +56,33 @@ export interface AnalysisResponse {
     topFeatures: string[];
     explanation: string;
   };
+  xai_metadata?: {
+    gradcamUrl: string | null;
+    attentionRegions: Array<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      score: number;
+    }>;
+    topFeatures: string[];
+    explanation: string;
+  };
   pipelineStages?: Record<string, string>;
+  pipeline_stages?: Record<string, string>;
+  errorMessage?: string;
+  error_message?: string;
   completedAt?: string;
+  completed_at?: string;
+}
+
+export interface AnalysisTriggerResponse {
+  analysisId: string;
+  uploadId: string;
+  status: "queued" | "processing" | "complete" | "failed";
+  message?: string;
+  estimatedSeconds?: number;
+  disclaimer?: string;
 }
 
 export interface ConsultationPayload {
@@ -127,7 +160,9 @@ export const api = {
 
   analysis: {
     trigger: (uploadId: string) =>
-      apiFetch<AnalysisResponse>(`/analysis/${uploadId}`, { method: "POST" }),
+      apiFetch<AnalysisTriggerResponse>(`/analysis/${uploadId}`, {
+        method: "POST",
+      }),
 
     getById: (analysisId: string) =>
       apiFetch<AnalysisResponse>(`/analysis/${analysisId}`),

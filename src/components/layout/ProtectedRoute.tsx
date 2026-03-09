@@ -49,7 +49,9 @@ export function ProtectedRoute({
     !_allowedRoles.includes(userRole)
   ) {
     // Redirect to their respective dashboard if they try to access unauthorized routes
-    if (userRole === "doctor") {
+    if (userRole === "admin") {
+      return <Navigate to="/admin" replace />;
+    } else if (userRole === "doctor") {
       return <Navigate to="/doctor" replace />;
     } else {
       return <Navigate to="/patient" replace />;

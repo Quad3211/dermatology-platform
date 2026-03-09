@@ -49,6 +49,12 @@ export function PatientList() {
   const { data: patients = [], isLoading } = useQuery<PatientRecord[]>({
     queryKey: ["doctor-patient-directory"],
     queryFn: async () => {
+      // Get the current doctor's user ID so we only show their patients
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return [];
+
       const { data, error } = await supabase
         .from("consultations")
         .select(
@@ -58,6 +64,7 @@ export function PatientList() {
           analysis:analysis_results(risk_level)
         `,
         )
+        .eq("doctor_id", user.id) // 🔑 only this doctor's assigned patients
         .in("status", ["pending", "scheduled", "reviewed", "closed"])
         .order("created_at", { ascending: false });
 

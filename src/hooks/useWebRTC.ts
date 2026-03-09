@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { supabase } from "../config/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
-// ── ICE servers (STUN for NAT traversal, free TURN fallback) ─────
+// ── ICE servers ───────────────────────────────────────────────
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
@@ -24,14 +24,13 @@ export type CallState =
 
 interface UseWebRTCOptions {
   consultationId: string;
-  role: "doctor" | "patient";
+  role?: "doctor" | "patient"; // kept for API compatibility, not used internally
   onIncomingCall?: (callerName: string) => void;
   onCallEnded?: () => void;
 }
 
 export function useWebRTC({
   consultationId,
-  role,
   onIncomingCall,
   onCallEnded,
 }: UseWebRTCOptions) {
@@ -41,14 +40,22 @@ export function useWebRTC({
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
 
-  // Exposed refs for video elements
+  // Exposed refs for video elements (VideoCallRoom attaches DOM nodes here)
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  if (!localVideoRef.current) {
+    localVideoRef.current = document.createElement("video");
+  }
+  if (!remoteVideoRef.current) {
+    remoteVideoRef.current = document.createElement("video");
+  }
+
   const channelName = `call:${consultationId}`;
 
-  // ── Create peer connection ───────────────────────────────────────
+  // ── Create peer connection ─────────────────────────────────
   const createPC = useCallback(() => {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
@@ -80,7 +87,7 @@ export function useWebRTC({
     return pc;
   }, [onCallEnded]);
 
-  // ── Get local camera/mic ─────────────────────────────────────────
+  // ── Get local media ────────────────────────────────────────
   const getLocalMedia = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: 1280, height: 720 },
@@ -93,42 +100,57 @@ export function useWebRTC({
     return stream;
   }, []);
 
-  // ── Subscribe to signaling channel ──────────────────────────────
+  // ── Handle offer (common for both sides receiving an offer) ─
+  const handleOffer = useCallback(
+    async (sdp: RTCSessionDescriptionInit) => {
+      setCallState("connecting");
+      const pc = createPC();
+      const stream = await getLocalMedia();
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "answer",
+        payload: { sdp: answer },
+      });
+    },
+    [createPC, getLocalMedia],
+  );
+
+  // ── Subscribe to signaling channel ────────────────────────
   useEffect(() => {
     const channel = supabase.channel(channelName, {
       config: { broadcast: { self: false } },
     });
 
     channel
+      // Incoming call notification
       .on("broadcast", { event: "call-request" }, ({ payload }) => {
-        if (role === "patient") {
-          setCallState("incoming");
-          onIncomingCall?.(payload.callerName ?? "Your doctor");
-        }
+        // The OTHER party (not the one who sent it) receives this
+        setCallState("incoming");
+        onIncomingCall?.(payload.callerName ?? "");
       })
+      // Caller sent offer — store it; we process on accept
       .on("broadcast", { event: "offer" }, async ({ payload }) => {
-        if (role === "patient") {
-          setCallState("connecting");
-          const pc = createPC();
-          const stream = await getLocalMedia();
-          stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          channel.send({
-            type: "broadcast",
-            event: "answer",
-            payload: { sdp: answer },
-          });
+        if (callState === "connecting") {
+          // Already accepted — process immediately
+          await handleOffer(payload.sdp);
+        } else {
+          // Store for later (patient may still be on the accept screen)
+          pendingOfferRef.current = payload.sdp;
         }
       })
+      // Answer from the other party
       .on("broadcast", { event: "answer" }, async ({ payload }) => {
-        if (role === "doctor" && pcRef.current) {
+        if (pcRef.current) {
           await pcRef.current.setRemoteDescription(
             new RTCSessionDescription(payload.sdp),
           );
         }
       })
+      // ICE candidates
       .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
         if (pcRef.current && payload.candidate) {
           try {
@@ -138,10 +160,24 @@ export function useWebRTC({
           } catch (_) {}
         }
       })
+      // Remote hung up
       .on("broadcast", { event: "call-ended" }, () => {
         setCallState("ended");
         onCallEnded?.();
         cleanup(false);
+      })
+      // Callee accepted — caller can now send the offer
+      .on("broadcast", { event: "call-accepted" }, async () => {
+        // Only the caller (who is waiting) handles this
+        if (callState !== "calling" || !pcRef.current) return;
+        const offer = pcRef.current.localDescription;
+        if (offer) {
+          channelRef.current?.send({
+            type: "broadcast",
+            event: "offer",
+            payload: { sdp: offer },
+          });
+        }
       })
       .subscribe();
 
@@ -150,20 +186,21 @@ export function useWebRTC({
     return () => {
       channel.unsubscribe();
     };
-  }, [channelName, role, createPC, getLocalMedia, onIncomingCall, onCallEnded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelName]);
 
-  // ── Doctor: initiate call ────────────────────────────────────────
+  // ── Initiate call (works for doctor OR patient) ──────────
   const startCall = useCallback(
-    async (callerName = "Dr. ") => {
+    async (myName = "") => {
       try {
         setError(null);
         setCallState("calling");
 
-        // Announce call to patient
+        // Notify the other party
         channelRef.current?.send({
           type: "broadcast",
           event: "call-request",
-          payload: { callerName },
+          payload: { callerName: myName },
         });
 
         const pc = createPC();
@@ -173,15 +210,14 @@ export function useWebRTC({
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // Small delay so patient has time to accept
-        await new Promise((r) => setTimeout(r, 1500));
-
+        // Send the offer immediately — the other side stores it until they
+        // accept, then processes it via acceptCall()
         channelRef.current?.send({
           type: "broadcast",
           event: "offer",
           payload: { sdp: offer },
         });
-      } catch (err) {
+      } catch (_err) {
         setError(
           "Could not access camera/microphone. Please allow permissions.",
         );
@@ -191,12 +227,26 @@ export function useWebRTC({
     [createPC, getLocalMedia],
   );
 
-  // ── Patient: accept call ─────────────────────────────────────────
+  // ── Accept call ───────────────────────────────────────────
   const acceptCall = useCallback(async () => {
     setCallState("connecting");
-  }, []);
 
-  // ── End call ─────────────────────────────────────────────────────
+    if (pendingOfferRef.current) {
+      // We already received the offer — process it now
+      await handleOffer(pendingOfferRef.current);
+      pendingOfferRef.current = null;
+    } else {
+      // Offer not received yet — signal readiness; offer handler
+      // above will process it when it arrives (state is "connecting")
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "call-accepted",
+        payload: {},
+      });
+    }
+  }, [handleOffer]);
+
+  // ── Cleanup ───────────────────────────────────────────────
   const cleanup = useCallback((sendSignal = true) => {
     if (sendSignal) {
       channelRef.current?.send({
@@ -209,6 +259,7 @@ export function useWebRTC({
     pcRef.current?.close();
     localStreamRef.current = null;
     pcRef.current = null;
+    pendingOfferRef.current = null;
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   }, []);

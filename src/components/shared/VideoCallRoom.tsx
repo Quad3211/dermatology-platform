@@ -20,6 +20,8 @@ interface VideoCallRoomProps {
   otherPartyName: string;
   onClose: () => void;
   autoStart?: boolean; // doctor auto-starts; patient waits
+  // Allow passing an existing WebRTC bag (e.g., from an incoming call listener)
+  webRtcState?: ReturnType<typeof useWebRTC>;
 }
 
 export function VideoCallRoom({
@@ -28,11 +30,21 @@ export function VideoCallRoom({
   otherPartyName,
   onClose,
   autoStart = false,
+  webRtcState,
 }: VideoCallRoomProps) {
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const localContainerRef = useRef<HTMLDivElement>(null);
   const remoteContainerRef = useRef<HTMLDivElement>(null);
+
+  // If provided, use the existing WebRTC state; otherwise create a new one.
+  const internalRtc = useWebRTC({
+    consultationId,
+    role,
+    onCallEnded: onClose,
+  });
+
+  const rtc = webRtcState || internalRtc;
 
   const {
     callState,
@@ -41,11 +53,7 @@ export function VideoCallRoom({
     startCall,
     acceptCall,
     endCall,
-  } = useWebRTC({
-    consultationId,
-    role,
-    onCallEnded: onClose,
-  });
+  } = rtc;
 
   // Attach video elements into the DOM refs
   useEffect(() => {
@@ -66,12 +74,12 @@ export function VideoCallRoom({
     };
   }, [localVideoRef, remoteVideoRef]);
 
-  // Doctor auto-starts the call
+  // Auto-start the call when the component renders as the caller
   useEffect(() => {
-    if (autoStart && role === "doctor" && callState === "idle") {
+    if (autoStart && callState === "idle") {
       startCall(otherPartyName);
     }
-  }, [autoStart, role, callState, startCall, otherPartyName]);
+  }, [autoStart, callState, startCall, otherPartyName]);
 
   const toggleMic = () => {
     const stream = (localVideoRef.current?.srcObject as MediaStream) ?? null;

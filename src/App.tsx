@@ -2,8 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionWatcher } from "./components/shared/SessionWatcher";
 import { AuthLayout } from "./components/layout/AuthLayout";
-import { Login } from "./pages/auth/Login";
-import { Register } from "./pages/auth/Register";
+import { PatientLogin } from "./pages/auth/PatientLogin";
+import { PatientRegister } from "./pages/auth/PatientRegister";
+import { DoctorLogin } from "./pages/auth/DoctorLogin";
+import { DoctorRegister } from "./pages/auth/DoctorRegister";
+import { AdminLogin } from "./pages/auth/AdminLogin";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { PatientLayout } from "./components/layout/PatientLayout";
 import { Dashboard } from "./pages/patient/Dashboard";
@@ -22,6 +25,8 @@ import {
 } from "./pages/public/LegalPages";
 import { ContactPage } from "./pages/public/ContactPage";
 import { AboutPage } from "./pages/public/AboutPage";
+import { PublicScanner } from "./pages/public/PublicScanner";
+import { AdminDashboard } from "./pages/admin/AdminDashboard";
 
 // Create a client
 const queryClient = new QueryClient();
@@ -36,8 +41,11 @@ function App() {
         <Routes>
           {/* Public Auth Routes */}
           <Route element={<AuthLayout />}>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<PatientLogin />} />
+            <Route path="/register" element={<PatientRegister />} />
+            <Route path="/doctor/login" element={<DoctorLogin />} />
+            <Route path="/doctor/register" element={<DoctorRegister />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
           </Route>
 
           {/* Secure Patient Routing */}
@@ -62,8 +70,14 @@ function App() {
             </Route>
           </Route>
 
+          {/* Secure Admin Routing */}
+          <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+            <Route path="/admin" element={<AdminDashboard />} />
+          </Route>
+
           {/* Public Landing Page */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/scan" element={<PublicScanner />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />

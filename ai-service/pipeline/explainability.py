@@ -6,13 +6,11 @@ Dev: Returns stub metadata.
 """
 import io
 import os
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List
 
 import numpy as np
 from PIL import Image
-import torch
 
 from .lesion_detector import DetectionResult
 
@@ -50,7 +48,7 @@ XAI_BUCKET     = "xai-outputs"
 
 
 def generate_xai(
-    tensor_380:  torch.Tensor,
+    tensor_380: object,
     pil_image:   Image.Image,
     detection:   DetectionResult,
     analysis_id: str,

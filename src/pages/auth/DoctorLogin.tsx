@@ -27,9 +27,7 @@ export function DoctorLogin() {
       if (error) throw error;
 
       const userRole = data.user.user_metadata?.role || "patient";
-      if (userRole === "admin") {
-        navigate("/admin");
-      } else if (userRole !== "doctor") {
+      if (userRole !== "doctor") {
         await supabase.auth.signOut();
         throw new Error(
           "This login is for medical professionals. Please use the Patient Portal.",

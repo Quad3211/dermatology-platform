@@ -6,7 +6,6 @@ import { PatientLogin } from "./pages/auth/PatientLogin";
 import { PatientRegister } from "./pages/auth/PatientRegister";
 import { DoctorLogin } from "./pages/auth/DoctorLogin";
 import { DoctorRegister } from "./pages/auth/DoctorRegister";
-import { AdminLogin } from "./pages/auth/AdminLogin";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { PatientLayout } from "./components/layout/PatientLayout";
 import { Dashboard } from "./pages/patient/Dashboard";
@@ -26,7 +25,6 @@ import {
 import { ContactPage } from "./pages/public/ContactPage";
 import { AboutPage } from "./pages/public/AboutPage";
 import { PublicScanner } from "./pages/public/PublicScanner";
-import { AdminDashboard } from "./pages/admin/AdminDashboard";
 
 // Create a client
 const queryClient = new QueryClient();
@@ -45,7 +43,6 @@ function App() {
             <Route path="/register" element={<PatientRegister />} />
             <Route path="/doctor/login" element={<DoctorLogin />} />
             <Route path="/doctor/register" element={<DoctorRegister />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
           </Route>
 
           {/* Secure Patient Routing */}
@@ -68,11 +65,6 @@ function App() {
               <Route path="/doctor/patients" element={<PatientList />} />
               <Route path="/doctor/settings" element={<DoctorSettings />} />
             </Route>
-          </Route>
-
-          {/* Secure Admin Routing */}
-          <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-            <Route path="/admin" element={<AdminDashboard />} />
           </Route>
 
           {/* Public Landing Page */}

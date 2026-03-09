@@ -5,9 +5,7 @@ import rateLimit from "express-rate-limit";
 import { uploadsRouter } from "./routes/uploads.js";
 import { analysisRouter } from "./routes/analysis.js";
 import { consultationsRouter } from "./routes/consultations.js";
-import { auditRouter } from "./routes/audit.js";
 import { healthRouter } from "./routes/health.js";
-import { gdprRouter } from "./routes/gdpr.js";
 import { publicRouter } from "./routes/public.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestAuditLogger } from "./middleware/auditLogger.js";
@@ -72,8 +70,6 @@ app.use("/api/v1/health", healthRouter);
 app.use("/api/v1/uploads", uploadsRouter);
 app.use("/api/v1/analysis", analysisRouter);
 app.use("/api/v1/consultations", consultationsRouter);
-app.use("/api/v1/audit", auditRouter);
-app.use("/api/v1/gdpr", gdprRouter);
 app.use("/api/v1/public", publicRouter);
 
 // ── Central error handler ─────────────────────────────────────

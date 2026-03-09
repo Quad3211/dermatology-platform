@@ -122,10 +122,6 @@ export function DoctorSettings() {
           </CardContent>
         </Card>
       </div>
-
-      <p className="text-center text-xs text-slate-400 mt-8 mb-4">
-        Settings are managed globally by the hospital administration network.
-      </p>
     </div>
   );
 }

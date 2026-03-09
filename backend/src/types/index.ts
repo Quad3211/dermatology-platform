@@ -1,6 +1,6 @@
 // ── Domain types shared across backend ────────────────────────
 
-export type UserRole = "patient" | "doctor" | "admin";
+export type UserRole = "patient" | "doctor";
 export type UploadStatus =
   | "pending"
   | "uploaded"

@@ -125,7 +125,7 @@ export function SecureTextChat({
 
       return { previousMessages };
     },
-    onError: (err, newText, context) => {
+    onError: (_err, _newText, context) => {
       if (context?.previousMessages) {
         queryClient.setQueryData(
           ["chat", consultationId],

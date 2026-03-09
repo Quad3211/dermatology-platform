@@ -1,6 +1,6 @@
 """
 DermTriage AI Microservice
-FastAPI application — 9-stage skin lesion risk triage pipeline
+FastAPI application — simplified skin lesion risk triage pipeline with Gemini
 """
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -11,11 +11,12 @@ from pydantic import BaseModel, UUID4
 import os
 
 from pipeline.image_validator import validate_image
-from pipeline.preprocessor import preprocess_image
-from pipeline.lesion_detector import detect_lesions
-from pipeline.risk_scorer import score_risk
-from pipeline.explainability import generate_xai
-from pipeline.medical_safety import apply_safety_gate, MANDATORY_DISCLAIMER
+from pipeline.gemini_analyzer import analyze_skin_with_gemini
+from pipeline.medical_safety import (
+    apply_safety_gate,
+    get_risk_guidance,
+    MANDATORY_DISCLAIMER,
+)
 from services.supabase_client import get_supabase
 from services.storage_client import download_image
 
@@ -90,7 +91,7 @@ async def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks) -> Ana
 # ── Pipeline orchestration ─────────────────────────────────────
 async def run_pipeline(req: AnalyzeRequest) -> None:
     """
-    Full 9-stage pipeline — runs in background.
+    Full pipeline with Gemini Analysis — runs in background.
     Writes progress + result directly to Supabase.
     """
     supabase = get_supabase()
@@ -126,27 +127,22 @@ async def run_pipeline(req: AnalyzeRequest) -> None:
         validate_image(image_bytes)
         update_progress("validation", "pass", 15)
 
-        # ── Stage 3: Preprocess ───────────────────────────────
-        tensor_224, tensor_380, pil_image = preprocess_image(image_bytes)
-        update_progress("preprocessing", "pass", 30)
-
-        # ── Stage 4: Lesion Detection (CNN) ───────────────────
-        detection = detect_lesions(tensor_380, pil_image)
-        update_progress("lesionDetection", "pass", 50)
-
-        # ── Stage 5+6: Risk Scoring (ViT ensemble) ────────────
-        risk_result = score_risk(tensor_224, detection)
-        update_progress("riskScoring", "pass", 70)
-
-        # ── Stage 8: Explainability ───────────────────────────
-        xai_result = generate_xai(tensor_380, pil_image, detection, analysis_id)
-        update_progress("explainability", "pass", 85)
+        # ── Stage 3: Gemini Analysis ──────────────────────────
+        gemini_result = analyze_skin_with_gemini(image_bytes)
+        update_progress("geminiAnalysis", "pass", 70)
 
         # ── Stage 9: Medical Safety Gate ──────────────────────
         safe_result = apply_safety_gate(
-            raw_summary=risk_result.summary,
-            risk_level=risk_result.risk_level,
-            confidence=risk_result.confidence,
+            raw_summary=gemini_result.get("summary", ""),
+            risk_level=gemini_result.get("risk_level", "LOW"),
+            confidence=gemini_result.get("confidence", 0.0),
+        )
+        guidance = get_risk_guidance(gemini_result.get("risk_level", "LOW"))
+        guidance_msg = str(guidance.get("message", "")).strip()
+        final_summary = (
+            f"{safe_result.summary}\n\nSuggested next step: {guidance_msg}"
+            if guidance_msg
+            else safe_result.summary
         )
         update_progress("safetyGate", "pass", 95)
 
@@ -154,19 +150,21 @@ async def run_pipeline(req: AnalyzeRequest) -> None:
         supabase.table("analysis_results").update({
             "status":           "complete",
             "progress":         100,
-            "risk_level":       risk_result.risk_level,
-            "confidence":       round(risk_result.confidence, 3),
-            "severity_score":   round(risk_result.severity_score, 1),
-            "summary":          safe_result.summary,
+            "risk_level":       gemini_result.get("risk_level", "LOW"),
+            "confidence":       round(gemini_result.get("confidence", 0.0), 3),
+            "severity_score":   round(gemini_result.get("severity_score", 0.0), 1),
+            "summary":          final_summary,
             "disclaimer":       MANDATORY_DISCLAIMER,
             "referral_required": safe_result.referral_required,
             "emergency_flag":   safe_result.emergency_flag,
-            "xai_metadata":     xai_result.to_dict(),
+            "xai_metadata":     {},
             "completed_at":     "now()",
         }).eq("id", analysis_id).execute()
 
-        print(f"[Pipeline] Analysis {analysis_id} complete — risk: {risk_result.risk_level}")
+        print(f"[Pipeline] Analysis {analysis_id} complete — risk: {gemini_result.get('risk_level', 'LOW')}")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[Pipeline] Analysis {analysis_id} FAILED: {e}")
         mark_failed(str(e))

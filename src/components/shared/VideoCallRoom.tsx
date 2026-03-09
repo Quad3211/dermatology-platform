@@ -36,7 +36,6 @@ export function VideoCallRoom({
 
   const {
     callState,
-    error,
     localVideoRef,
     remoteVideoRef,
     startCall,

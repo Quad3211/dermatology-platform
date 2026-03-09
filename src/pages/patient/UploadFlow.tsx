@@ -1,26 +1,33 @@
 import { useState } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { ImageUploader } from "../../components/medical/ImageUploader";
-import { RealTimeShield } from "../../components/shared/RealTimeShield";
+import { ScanningAnimation } from "../../components/shared/ScanningAnimation";
 import { RiskAssessmentWidget } from "../../components/medical/RiskAssessmentWidget";
 import { SkinBodyMap } from "../../components/medical/SkinBodyMap";
 import { supabase } from "../../config/supabase";
 import { Button } from "../../components/core/Button";
+import { api, type AnalysisResponse, type RiskLevel } from "../../services/api";
 
 export function UploadFlow() {
   const [step, setStep] = useState<
     "UPLOAD" | "ANALYSING" | "RESULTS" | "ERROR"
   >("UPLOAD");
-  const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(
+    null,
+  );
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const handleUpload = async (file: File) => {
     setIsUploading(true);
     setStep("ANALYSING");
-    setProgress(5);
-    setStatusText("Connecting securely to storage…");
+    setAnalysisResult(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(file));
+    setErrorMsg("");
+    setStatusText("Connecting securely to storage...");
 
     try {
       // 1. Get current user
@@ -30,8 +37,7 @@ export function UploadFlow() {
       if (!user) throw new Error("Not signed in. Please log in and try again.");
 
       // 2. Insert upload record into uploads table
-      setProgress(15);
-      setStatusText("Creating secure upload record…");
+      setStatusText("Creating secure upload record...");
       const { data: uploadRecord, error: insertErr } = await supabase
         .from("uploads")
         .insert({
@@ -41,7 +47,7 @@ export function UploadFlow() {
           size_bytes: file.size,
           body_part: "unspecified",
           status: "pending",
-          storage_path: "", // will update after upload
+          storage_path: "", // updated after storage upload
           expires_at: new Date(
             Date.now() + 90 * 24 * 60 * 60 * 1000,
           ).toISOString(),
@@ -58,9 +64,8 @@ export function UploadFlow() {
       const uploadId = uploadRecord.id as string;
       const storagePath = `${user.id}/${uploadId}/${file.name}`;
 
-      // 3. Upload the image bytes directly to Supabase Storage
-      setProgress(35);
-      setStatusText("Encrypting and uploading image…");
+      // 3. Upload bytes to Supabase Storage
+      setStatusText("Encrypting and uploading image...");
       const { error: storageErr } = await supabase.storage
         .from("skin-images")
         .upload(storagePath, file, {
@@ -70,27 +75,24 @@ export function UploadFlow() {
 
       if (storageErr) throw new Error(storageErr.message);
 
-      // 4. Update record with storage path and mark as uploaded
-      setProgress(65);
-      setStatusText("Securing upload record…");
-      await supabase
+      // 4. Mark upload as uploaded
+      setStatusText("Securing upload record...");
+      const { error: updateErr } = await supabase
         .from("uploads")
         .update({ storage_path: storagePath, status: "uploaded" })
         .eq("id", uploadId);
 
-      // 5. Simulate pipeline progress (real pipeline would come from Realtime)
-      setProgress(70);
-      setStatusText("Analyzing dermatological morphologies…");
-      await delay(1200);
+      if (updateErr) throw new Error(updateErr.message);
 
-      setProgress(85);
-      setStatusText("Cross-referencing imaging patterns…");
-      await delay(1000);
+      // 5. Trigger backend AI pipeline and poll until completion
+      setStatusText("Submitting image for AI analysis...");
+      const queued = await api.analysis.trigger(uploadId);
+      const result = await pollAnalysisResult(queued.analysisId, (latest) => {
+        setStatusText(toStatusText(latest));
+      });
 
-      setProgress(100);
+      setAnalysisResult(result);
       setStatusText("Assessment complete.");
-      await delay(400);
-
       setStep("RESULTS");
     } catch (err) {
       const msg =
@@ -101,6 +103,13 @@ export function UploadFlow() {
       setIsUploading(false);
     }
   };
+  const resolvedRiskLevel = analysisResult ? toRiskLevel(analysisResult) : null;
+  const displaySummary = analysisResult
+    ? toDisplaySummary(
+        analysisResult.summary,
+        analysisResult.disclaimer,
+      )
+    : undefined;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 w-full fade-in">
@@ -112,7 +121,7 @@ export function UploadFlow() {
           {step === "ANALYSING" &&
             "Please wait while we process your image through our secure triage engine."}
           {step === "RESULTS" &&
-            "Upload complete. You can now book a consultation."}
+            "Analysis complete. Review your triage result and next steps."}
           {step === "ERROR" && "Something went wrong during upload."}
         </p>
       </div>
@@ -125,31 +134,67 @@ export function UploadFlow() {
           </>
         )}
 
-        {step === "ANALYSING" && (
-          <RealTimeShield progress={progress} status={statusText} />
+        {step === "ANALYSING" && previewUrl && (
+          <ScanningAnimation imageUrl={previewUrl} statusText={statusText} />
         )}
 
         {step === "RESULTS" && (
           <div className="space-y-6">
-            <RiskAssessmentWidget riskLevel="MODERATE" confidence={87.4} />
-            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
-              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-green-800">
-                  Image uploaded successfully
+            {analysisResult && resolvedRiskLevel && (
+              <RiskAssessmentWidget
+                riskLevel={resolvedRiskLevel}
+                confidence={toConfidencePercent(analysisResult)}
+                summary={displaySummary}
+                disclaimer={analysisResult.disclaimer}
+              />
+            )}
+            {analysisResult && !resolvedRiskLevel && (
+              <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                <p className="text-sm text-amber-800">
+                  Risk level is unavailable for this analysis. Please retry or contact support.
                 </p>
-                <p className="text-xs text-green-700 mt-0.5">
-                  You can now{" "}
-                  <a
-                    href="/patient/consultations/book"
-                    className="underline font-medium"
-                  >
-                    book a consultation
-                  </a>{" "}
-                  with a dermatologist.
+              </div>
+            )}
+
+            <div
+              className={`flex items-center gap-3 rounded-xl p-4 border ${
+                isEmergency(analysisResult)
+                  ? "bg-red-50 border-red-200"
+                  : "bg-green-50 border-green-200"
+              }`}
+            >
+              {isEmergency(analysisResult) ? (
+                <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+              )}
+              <div>
+                <p
+                  className={`text-sm font-semibold ${
+                    isEmergency(analysisResult)
+                      ? "text-red-800"
+                      : "text-green-800"
+                  }`}
+                >
+                  {isEmergency(analysisResult)
+                    ? "Urgent review required"
+                    : "Analysis completed successfully"}
+                </p>
+                <p
+                  className={`text-xs mt-0.5 ${
+                    isEmergency(analysisResult)
+                      ? "text-red-700"
+                      : "text-green-700"
+                  }`}
+                >
+                  {isEmergency(analysisResult)
+                    ? "Please seek immediate medical attention and contact emergency services if symptoms are severe."
+                    : "You can now book a consultation with a dermatologist for clinical confirmation."}
                 </p>
               </div>
             </div>
+
           </div>
         )}
 
@@ -164,7 +209,10 @@ export function UploadFlow() {
               onClick={() => {
                 setStep("UPLOAD");
                 setErrorMsg("");
-                setProgress(0);
+                setStatusText("");
+                setAnalysisResult(null);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
               }}
             >
               Try Again
@@ -176,6 +224,121 @@ export function UploadFlow() {
   );
 }
 
+const STAGE_SEQUENCE = [
+  "validation",
+  "preprocessing",
+  "lesionDetection",
+  "riskScoring",
+  "explainability",
+  "safetyGate",
+] as const;
+
+const STAGE_MESSAGES: Record<string, string> = {
+  validation: "Validating image quality and metadata...",
+  preprocessing: "Preprocessing image for model inference...",
+  lesionDetection: "Detecting lesion structures...",
+  riskScoring: "Scoring dermatology risk classes...",
+  explainability: "Generating explainability overlays...",
+  safetyGate: "Applying medical safety checks...",
+};
+
+async function pollAnalysisResult(
+  analysisId: string,
+  onUpdate: (result: AnalysisResponse) => void,
+): Promise<AnalysisResponse> {
+  const maxAttempts = 90; // ~3 minutes at 2s polling
+  const pollMs = 2000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await api.analysis.getById(analysisId);
+    onUpdate(result);
+
+    if (result.status === "complete") return result;
+    if (result.status === "failed") {
+      const msg =
+        result.errorMessage ??
+        result.error_message ??
+        "Analysis failed. Please try again.";
+      throw new Error(msg);
+    }
+
+    await delay(pollMs);
+  }
+
+  throw new Error("Analysis timed out. Please try again.");
+}
+
+function toStatusText(result: AnalysisResponse): string {
+  if (result.status === "queued") {
+    return "Queued for AI analysis...";
+  }
+
+  if (result.status === "processing") {
+    const stages = result.pipelineStages ?? result.pipeline_stages ?? {};
+    const latestCompleted = [...STAGE_SEQUENCE]
+      .reverse()
+      .find((stage) => stages[stage] === "pass");
+
+    if (latestCompleted) {
+      return STAGE_MESSAGES[latestCompleted];
+    }
+
+    return "Analyzing dermatological image...";
+  }
+
+  if (result.status === "complete") {
+    return "Assessment complete.";
+  }
+
+  return "Analysis failed.";
+}
+
+function toUiProgress(result: AnalysisResponse): number {
+  const raw = typeof result.progress === "number" ? result.progress : 0;
+  const clamped = Math.max(0, Math.min(100, raw));
+  return Math.round(45 + (clamped * 55) / 100);
+}
+
+function toRiskLevel(result: AnalysisResponse): RiskLevel | null {
+  const raw = result.riskLevel ?? result.risk_level;
+  if (
+    raw === "LOW" ||
+    raw === "MODERATE" ||
+    raw === "HIGH" ||
+    raw === "CRITICAL"
+  ) {
+    return raw;
+  }
+  return null;
+}
+
+function toConfidencePercent(result: AnalysisResponse): number {
+  const raw = result.confidence;
+  if (typeof raw !== "number" || Number.isNaN(raw)) return 0;
+  const percent = raw <= 1 ? raw * 100 : raw;
+  return Number(Math.max(0, Math.min(100, percent)).toFixed(1));
+}
+
+function toDisplaySummary(
+  summary: string | undefined,
+  disclaimer: string | undefined,
+): string | undefined {
+  if (!summary) return undefined;
+  if (!disclaimer) return summary.trim();
+
+  const stripped = summary
+    .replace(disclaimer, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return stripped || undefined;
+}
+
+function isEmergency(result: AnalysisResponse | null): boolean {
+  if (!result) return false;
+  return Boolean(result.emergencyFlag ?? result.emergency_flag);
+}
+
 function delay(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

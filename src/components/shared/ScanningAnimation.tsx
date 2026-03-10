@@ -1,84 +1,129 @@
-import React from "react";
-import { Activity, ShieldAlert, Cpu } from "lucide-react";
+import { Activity, Cpu } from "lucide-react";
+import { motion } from "framer-motion";
+
+interface BoundingBox {
+  ymin: number;
+  xmin: number;
+  ymax: number;
+  xmax: number;
+}
 
 interface ScanningAnimationProps {
   imageUrl: string;
-  statusText: string;
+  isScanning: boolean;
+  scanProgress: number;
+  scanComplete: boolean;
+  statusText?: string;
+  boundingBox?: BoundingBox | null;
 }
 
-export function ScanningAnimation({ imageUrl, statusText }: ScanningAnimationProps) {
+export function ScanningAnimation({
+  imageUrl,
+  isScanning,
+  scanProgress,
+  scanComplete,
+  statusText,
+  boundingBox,
+}: ScanningAnimationProps) {
+  // Convert 0-1000 scale to percentage for CSS
+  const getBoxStyle = (box: BoundingBox) => {
+    const top = `${(box.ymin / 1000) * 100}%`;
+    const left = `${(box.xmin / 1000) * 100}%`;
+    const height = `${((box.ymax - box.ymin) / 1000) * 100}%`;
+    const width = `${((box.xmax - box.xmin) / 1000) * 100}%`;
+    return { top, left, height, width };
+  };
+
   return (
-    <div className="w-full max-w-md mx-auto rounded-xl overflow-hidden relative shadow-2xl bg-black aspect-[4/5] border border-primary-900/50">
-      
-      {/* Base Image */}
+    <div className="w-full relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-square shadow-inner">
       <img
         src={imageUrl}
-        alt="Scanning"
-        className="w-full h-full object-cover opacity-60 mix-blend-screen filter contrast-125 saturate-50"
-      />
-      
-      {/* Grid Overlay */}
-      <div 
-        className="absolute inset-0 z-10 opacity-30 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, #0ea5e9 1px, transparent 1px),
-            linear-gradient(to bottom, #0ea5e9 1px, transparent 1px)
-          `,
-          backgroundSize: '40px 40px'
-        }}
+        alt="Skin preview"
+        className="w-full h-full object-cover"
       />
 
-      {/* Futuristic Scan Line */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-primary-400 z-20 shadow-[0_0_20px_5px_rgba(56,189,248,0.7)] animate-scan-line pointer-events-none" />
+      {isScanning && (
+        <div className="absolute inset-0 z-10">
+          <div
+            className="w-full h-1 bg-primary-500 shadow-[0_0_15px_rgba(14,165,233,0.8)] absolute left-0 transition-all duration-100 ease-linear"
+            style={{ top: `${scanProgress}%` }}
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 bg-primary-900/40 backdrop-blur-[2px] transition-all duration-100"
+            style={{ top: `${scanProgress}%` }}
+          />
+        </div>
+      )}
 
-      {/* Cyberpunk Vignette & Edge Glow */}
-      <div className="absolute inset-0 shadow-[inset_0_0_80px_rgba(0,0,0,0.9)] z-20 pointer-events-none" />
-      <div className="absolute inset-0 border-2 border-primary-500/20 z-20 rounded-xl pointer-events-none" />
+      {scanComplete && !boundingBox && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute inset-0 border-4 border-amber-400 z-20 flex items-center justify-center bg-black/30 pointer-events-none"
+        >
+          <div className="w-24 h-24 border-2 border-amber-400 border-dashed rounded-full" />
+        </motion.div>
+      )}
 
-      {/* HUD - Corner Brackets */}
-      <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-primary-400 z-30 opacity-70" />
-      <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-primary-400 z-30 opacity-70" />
-      <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-primary-400 z-30 opacity-70" />
-      <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-primary-400 z-30 opacity-70" />
+      {scanComplete && boundingBox && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute z-20 pointer-events-none"
+          style={getBoxStyle(boundingBox)}
+        >
+          {/* Inner transparent box with solid border */}
+          <div className="w-full h-full border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)] relative">
+            {/* Corner brackets */}
+            <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-red-500" />
+            <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-red-500" />
+            <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-red-500" />
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-red-500" />
 
-      {/* Data Overlays */}
-      <div className="absolute top-6 right-8 z-30 flex flex-col items-end gap-1">
-        <div className="flex items-center text-primary-400 text-[10px] font-mono tracking-widest">
+            {/* Label */}
+            <div className="absolute -top-6 text-white text-[10px] font-mono tracking-wider bg-red-500/90 px-2 py-0.5 rounded-sm whitespace-nowrap">
+              Primary Anomaly
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Optional HUD text overlay */}
+      {statusText && (
+        <div className="absolute bottom-6 inset-x-6 z-30">
+          <div className="bg-slate-950/80 backdrop-blur-md border border-primary-500/30 p-4 rounded-lg">
+            <div className="flex items-center mb-2">
+              <Activity className="w-4 h-4 text-primary-400 mr-2 animate-bounce" />
+              <span className="text-primary-300 text-xs font-mono font-semibold tracking-wider uppercase">
+                Neural Processing
+              </span>
+            </div>
+            <p className="text-white text-sm font-medium animate-pulse">
+              {statusText}
+            </p>
+
+            {isScanning && (
+              <div className="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden flex">
+                <div
+                  className="bg-primary-500 h-full transition-all duration-150"
+                  style={{ width: `${scanProgress}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Cyberpunk Vignette */}
+      <div className="absolute inset-0 shadow-[inset_0_0_80px_rgba(0,0,0,0.5)] z-0 pointer-events-none mix-blend-multiply" />
+
+      {/* Data Source overlays */}
+      <div className="absolute top-4 right-6 z-30 flex flex-col items-end gap-1 opacity-70">
+        <div className="flex items-center text-primary-400 text-[10px] font-mono tracking-widest drop-shadow-md">
           <Cpu className="w-3 h-3 mr-1 animate-pulse" />
           GEMINI VISION-FLASH
         </div>
-        <div className="text-primary-500/80 text-[10px] font-mono tracking-widest">
-          SEQ: {Math.random().toString(36).substring(2, 8).toUpperCase()}
-        </div>
       </div>
-
-      <div className="absolute bottom-12 inset-x-8 z-30">
-        <div className="bg-slate-950/80 backdrop-blur-md border border-primary-500/30 p-4 rounded-lg">
-          <div className="flex items-center mb-2">
-            <Activity className="w-4 h-4 text-primary-400 mr-2 animate-bounce" />
-            <span className="text-primary-300 text-xs font-mono font-semibold tracking-wider uppercase">
-              Neural Processing
-            </span>
-          </div>
-          <p className="text-white text-sm font-medium animate-pulse">
-            {statusText}
-          </p>
-          
-          <div className="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden">
-            <div className="bg-primary-500 h-full w-2/3 animate-[shimmer_2s_infinite] origin-left" />
-          </div>
-        </div>
-      </div>
-
-      {/* Crosshair */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-primary-500/20 rounded-full z-20 flex items-center justify-center animate-[spin_10s_linear_infinite]">
-        <div className="w-2 h-2 bg-primary-400 rounded-full opacity-50 absolute -top-1" />
-        <div className="w-2 h-2 bg-primary-400 rounded-full opacity-50 absolute -bottom-1" />
-        <div className="w-2 h-2 bg-primary-400 rounded-full opacity-50 absolute -left-1" />
-        <div className="w-2 h-2 bg-primary-400 rounded-full opacity-50 absolute -right-1" />
-      </div>
-
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useRef, useState, useCallback, useEffect } from "react";
-import { Camera, X, RefreshCw, Check } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { X, RefreshCw, Check } from "lucide-react";
 import { Button } from "../core/Button";
 
 interface CameraCaptureProps {
@@ -10,7 +10,7 @@ interface CameraCaptureProps {
 export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>("");
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
@@ -65,7 +65,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
             }
           },
           "image/jpeg",
-          0.9
+          0.9,
         );
       }
     }
@@ -105,7 +105,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
               <p>{error}</p>
             </div>
           )}
-          
+
           <div className="absolute top-4 right-4">
             <button
               onClick={onClose}
@@ -132,18 +132,25 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
             className="w-full h-full object-cover"
           />
           <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900/90 to-transparent p-6 flex justify-between items-center">
-            <Button variant="outline" onClick={retakePhoto} className="border-white text-white hover:bg-white/20">
+            <Button
+              variant="outline"
+              onClick={retakePhoto}
+              className="border-white text-white hover:bg-white/20"
+            >
               <RefreshCw className="w-4 h-4 mr-2" />
               Retake
             </Button>
-            <Button onClick={confirmPhoto} className="bg-primary-600 hover:bg-primary-500 text-white">
+            <Button
+              onClick={confirmPhoto}
+              className="bg-primary-600 hover:bg-primary-500 text-white"
+            >
               <Check className="w-4 h-4 mr-2" />
               Use Photo
             </Button>
           </div>
         </>
       )}
-      
+
       {/* Hidden working canvas */}
       <canvas ref={canvasRef} className="hidden" />
     </div>

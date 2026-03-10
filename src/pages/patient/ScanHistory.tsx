@@ -1,22 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/core/Card";
+import { Card, CardContent } from "../../components/core/Card";
 import { Button } from "../../components/core/Button";
 import {
-  UploadCloud,
+  Clock,
   FileSearch,
-  ShieldCheck,
   Loader2,
   Calendar,
   MessageSquare,
   AlertTriangle,
   CheckCircle,
-  Clock,
   Video,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -26,12 +19,13 @@ import { SecureTextChat } from "../../components/shared/SecureTextChat";
 import { VideoCallRoom } from "../../components/shared/VideoCallRoom";
 
 // ── Types ──────────────────────────────────────────────────────
-interface DashboardUpload {
-  id: string; // upload ID
+interface UploadHistoryItem {
+  id: string; // upload id
   created_at: string;
-  status: string;
+  status: string; // upload status
   body_part: string | null;
   analysis: {
+    id: string;
     risk_level: string;
     summary?: string;
     confidence?: number;
@@ -53,12 +47,12 @@ const RISK_COLORS: Record<string, string> = {
   LOW: "text-green-700 bg-green-50 ring-green-200",
 };
 
-export function Dashboard() {
+export function ScanHistory() {
   const [chatConsultId, setChatConsultId] = useState<string | null>(null);
   const [callConsultId, setCallConsultId] = useState<string | null>(null);
 
-  const { data: uploads = [], isLoading } = useQuery<DashboardUpload[]>({
-    queryKey: ["patient-dashboard-uploads"],
+  const { data: uploads = [], isLoading } = useQuery<UploadHistoryItem[]>({
+    queryKey: ["patient-scan-history"],
     queryFn: async () => {
       const {
         data: { user },
@@ -70,26 +64,27 @@ export function Dashboard() {
         .select(
           `
           id, created_at, status, body_part,
-          analysis:analysis_results(risk_level, summary, confidence, severity_score),
+          analysis:analysis_results(id, risk_level, summary, confidence, severity_score),
           consultations(id, status, scheduled_at, doctor_notes, doctor:profiles!consultations_doctor_id_fkey(full_name))
         `,
         )
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(3);
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
+      // The joined data might be arrays. Supabase returns single objects for 1:1, but arrays for 1:N
+      // analysis_results is 1:1, consultations is 1:N
       return (data as any[]).map((item) => ({
         ...item,
         analysis: Array.isArray(item.analysis)
           ? item.analysis[0]
           : item.analysis,
-      })) as DashboardUpload[];
+      })) as UploadHistoryItem[];
     },
   });
 
-  // Find exact consultation object for chat/call
+  // Find the exact consultation object for chat/call
   const getConsultation = (id: string) => {
     for (const u of uploads) {
       const c = u.consultations?.find((c) => c.id === id);
@@ -98,18 +93,22 @@ export function Dashboard() {
     return null;
   };
 
-  const callConsult = callConsultId ? getConsultation(callConsultId) : null;
-  const chatConsult = chatConsultId ? getConsultation(chatConsultId) : null;
+  const activeCallConsult = callConsultId
+    ? getConsultation(callConsultId)
+    : null;
+  const activeChatConsult = chatConsultId
+    ? getConsultation(chatConsultId)
+    : null;
 
   // ── Call View Active ──────────────────────────────────────────
-  if (callConsult) {
-    const doctorName = callConsult.doctor?.full_name
-      ? `Dr. ${callConsult.doctor.full_name.replace(/^Dr\.\s*/i, "")}`
+  if (activeCallConsult) {
+    const doctorName = activeCallConsult.doctor?.full_name
+      ? `Dr. ${activeCallConsult.doctor.full_name.replace(/^Dr\.\s*/i, "")}`
       : "Your Doctor";
 
     return (
       <VideoCallRoom
-        consultationId={callConsult.id}
+        consultationId={activeCallConsult.id}
         role="patient"
         otherPartyName={doctorName}
         onClose={() => setCallConsultId(null)}
@@ -119,16 +118,16 @@ export function Dashboard() {
   }
 
   // ── Chat View Active ──────────────────────────────────────────
-  if (chatConsult) {
-    const doctorName = chatConsult.doctor?.full_name
-      ? `Dr. ${chatConsult.doctor.full_name.replace("Dr. ", "")}`
+  if (activeChatConsult) {
+    const doctorName = activeChatConsult.doctor?.full_name
+      ? `Dr. ${activeChatConsult.doctor.full_name.replace(/^Dr\.\s*/i, "")}`
       : "Your Doctor";
 
     return (
       <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 fade-in">
         <div className="w-full max-w-3xl h-[80vh] shadow-2xl rounded-2xl overflow-hidden animate-in zoom-in-95 duration-200">
           <SecureTextChat
-            consultationId={chatConsult.id}
+            consultationId={activeChatConsult.id}
             role="patient"
             otherPartyName={doctorName}
             onClose={() => setChatConsultId(null)}
@@ -141,84 +140,17 @@ export function Dashboard() {
   return (
     <div className="space-y-6 fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          Welcome to your Portal
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-900">Scan History</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Manage your skin health assessments and track your progress securely.
+          A complete record of all your secure skin scans and AI assessments.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="col-span-1 md:col-span-2 bg-gradient-to-br from-primary-600 to-primary-800 text-white border-none">
-          <CardContent className="p-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between">
-              <div className="space-y-4 max-w-md">
-                <h2 className="text-2xl font-bold">
-                  Start a new AI Assessment
-                </h2>
-                <p className="text-primary-100">
-                  Upload a photo of a skin lesion for an immediate, confidential
-                  AI-driven risk assessment.
-                </p>
-                <Link to="/patient/upload">
-                  <Button
-                    variant="secondary"
-                    className="mt-4 text-primary-700 w-full sm:w-auto"
-                  >
-                    <UploadCloud className="mr-2 h-5 w-5" />
-                    Upload Image
-                  </Button>
-                </Link>
-              </div>
-              <div className="mt-6 sm:mt-0 opacity-20 hidden sm:block">
-                <FileSearch className="h-32 w-32" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-slate-800 flex items-center">
-              <ShieldCheck className="h-5 w-5 text-status-safe mr-2" />
-              Privacy Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-600 mb-4">
-              Your images are securely stored and will be automatically purged
-              after 72 hours per your medical profile settings.
-            </p>
-            <div className="text-xs text-slate-400 border-t border-slate-100 pt-4 cursor-default">
-              System is end-to-end encrypted.
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="mt-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-slate-900">
-            Recent Assessments
-          </h3>
-          {uploads.length > 0 && (
-            <Link to="/patient/history">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-primary-600 hover:text-primary-700"
-              >
-                View Full History
-              </Button>
-            </Link>
-          )}
-        </div>
-
         {isLoading ? (
           <div className="flex items-center justify-center p-12 text-slate-400 border border-surface-border rounded-xl bg-white">
             <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            Loading assessments...
+            Loading your scan history...
           </div>
         ) : uploads.length === 0 ? (
           <Card>
@@ -227,7 +159,7 @@ export function Dashboard() {
                 <FileSearch className="h-8 w-8 text-slate-300" />
               </div>
               <p className="text-slate-900 font-medium mb-1">
-                No prior assessments.
+                No past scans found.
               </p>
               <p className="text-sm mb-6">
                 You haven't uploaded any lesions yet.
@@ -238,13 +170,15 @@ export function Dashboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {uploads.map((upload) => {
               const riskLevel = upload.analysis?.risk_level ?? "PENDING";
+              // get the most recent consultation if there are multiple
               const consult =
                 upload.consultations?.length > 0
                   ? upload.consultations.reduce(
                       (latest, current) =>
+                        // In real app, might want to check created_at, but we'll assume the 0th is most relevant for now or pick active ones
                         current.status === "scheduled" ||
                         current.status === "pending"
                           ? current
@@ -262,11 +196,11 @@ export function Dashboard() {
                   key={upload.id}
                   className="overflow-hidden hover:shadow-md transition-shadow"
                 >
-                  <div className="flex flex-col md:flex-row md:items-center p-0">
-                    {/* Status accent border */}
+                  <div className="flex flex-col md:flex-row p-0">
+                    {/* Status accent border based on RISK */}
                     <div
                       className={cn(
-                        "h-1.5 md:h-auto md:w-1.5 shrink-0",
+                        "h-1.5 md:h-auto md:w-2 shrink-0 left-0 top-0",
                         riskLevel === "CRITICAL"
                           ? "bg-red-500"
                           : riskLevel === "HIGH"
@@ -280,17 +214,24 @@ export function Dashboard() {
                     />
 
                     <div className="flex-1 p-5 lg:p-6 pb-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span
-                            className={cn(
-                              "text-xs px-2.5 py-0.5 rounded-full font-bold tracking-wider ring-1 uppercase",
-                              RISK_COLORS[riskLevel] ??
-                                "bg-slate-100 text-slate-600 ring-slate-200",
-                            )}
-                          >
-                            {riskLevel} RISK
-                          </span>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span
+                              className={cn(
+                                "text-xs px-2.5 py-0.5 rounded-full font-bold tracking-wider ring-1 uppercase",
+                                RISK_COLORS[riskLevel] ??
+                                  "bg-slate-100 text-slate-600 ring-slate-200",
+                              )}
+                            >
+                              {riskLevel} RISK
+                            </span>
+                          </div>
+                          <h3 className="font-semibold text-lg text-slate-800">
+                            {upload.body_part
+                              ? `Scan: ${upload.body_part}`
+                              : "Skin Scan"}
+                          </h3>
                           <span className="text-sm font-medium text-slate-500 flex items-center gap-1.5">
                             <Clock className="h-3.5 w-3.5" />
                             {new Date(upload.created_at).toLocaleDateString(
@@ -299,11 +240,14 @@ export function Dashboard() {
                                 month: "short",
                                 day: "numeric",
                                 year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
                               },
                             )}
                           </span>
                         </div>
 
+                        {/* Consultation Status Badge */}
                         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
                           {!consult && (
                             <span className="text-slate-400 flex items-center">
@@ -393,7 +337,7 @@ export function Dashboard() {
                       )}
                     </div>
 
-                    <div className="bg-slate-50 p-5 lg:p-6 border-t md:border-t-0 md:border-l border-surface-border flex flex-col justify-center gap-3 w-full md:w-48 shrink-0">
+                    <div className="bg-slate-50 p-5 lg:p-6 border-t md:border-t-0 md:border-l border-surface-border flex flex-col justify-center gap-3 w-full md:w-56 shrink-0">
                       {isScheduledOrReviewed ? (
                         <>
                           <Button

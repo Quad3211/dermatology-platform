@@ -2,7 +2,15 @@ import { useState } from "react";
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../config/supabase";
 import { Button } from "../core/Button";
-import { LogOut, Activity, UploadCloud, FileText, Menu, X } from "lucide-react";
+import {
+  LogOut,
+  Activity,
+  UploadCloud,
+  FileText,
+  Menu,
+  X,
+  History,
+} from "lucide-react";
 import { cn } from "../../utils/cn";
 import { IncomingCallListener } from "../shared/IncomingCallListener";
 
@@ -19,6 +27,7 @@ export function PatientLayout() {
   const navLinks = [
     { name: "Dashboard", path: "/patient", icon: Activity },
     { name: "New Scan", path: "/patient/upload", icon: UploadCloud },
+    { name: "Scan History", path: "/patient/history", icon: History },
     { name: "Education", path: "/patient/education", icon: FileText },
   ];
 

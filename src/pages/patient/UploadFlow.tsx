@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { ImageUploader } from "../../components/medical/ImageUploader";
 import { ScanningAnimation } from "../../components/shared/ScanningAnimation";
@@ -19,6 +19,23 @@ export function UploadFlow() {
     null,
   );
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState(0);
+
+  // Fake progressive scanning animation while backend processes
+  useEffect(() => {
+    if (step !== "ANALYSING") return;
+
+    setScanProgress(0); // Start at 0
+    const interval = setInterval(() => {
+      setScanProgress((p) => {
+        // Approach 95% asymptotically so it never reaches 100% until finished
+        if (p >= 95) return 95;
+        return p + Math.random() * 5 + 2;
+      });
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [step]);
 
   const handleUpload = async (file: File) => {
     setIsUploading(true);
@@ -37,7 +54,8 @@ export function UploadFlow() {
       if (!user) throw new Error("Not signed in. Please log in and try again.");
 
       // 2. Insert upload record into uploads table
-      setStatusText("Creating secure upload record...");
+      setStatusText("Creating secure upload record..."); // Fake 10%
+      setScanProgress(10);
       const { data: uploadRecord, error: insertErr } = await supabase
         .from("uploads")
         .insert({
@@ -66,6 +84,7 @@ export function UploadFlow() {
 
       // 3. Upload bytes to Supabase Storage
       setStatusText("Encrypting and uploading image...");
+      setScanProgress(25);
       const { error: storageErr } = await supabase.storage
         .from("skin-images")
         .upload(storagePath, file, {
@@ -77,6 +96,7 @@ export function UploadFlow() {
 
       // 4. Mark upload as uploaded
       setStatusText("Securing upload record...");
+      setScanProgress(40);
       const { error: updateErr } = await supabase
         .from("uploads")
         .update({ storage_path: storagePath, status: "uploaded" })
@@ -93,6 +113,7 @@ export function UploadFlow() {
 
       setAnalysisResult(result);
       setStatusText("Assessment complete.");
+      setScanProgress(100);
       setStep("RESULTS");
     } catch (err) {
       const msg =
@@ -105,10 +126,7 @@ export function UploadFlow() {
   };
   const resolvedRiskLevel = analysisResult ? toRiskLevel(analysisResult) : null;
   const displaySummary = analysisResult
-    ? toDisplaySummary(
-        analysisResult.summary,
-        analysisResult.disclaimer,
-      )
+    ? toDisplaySummary(analysisResult.summary, analysisResult.disclaimer)
     : undefined;
 
   return (
@@ -135,7 +153,25 @@ export function UploadFlow() {
         )}
 
         {step === "ANALYSING" && previewUrl && (
-          <ScanningAnimation imageUrl={previewUrl} statusText={statusText} />
+          <ScanningAnimation
+            imageUrl={previewUrl}
+            isScanning={true}
+            scanProgress={scanProgress}
+            scanComplete={false}
+            statusText={statusText}
+          />
+        )}
+
+        {step === "RESULTS" && previewUrl && (
+          <div className="mb-6">
+            <ScanningAnimation
+              imageUrl={previewUrl}
+              isScanning={false}
+              scanProgress={100}
+              scanComplete={true}
+              boundingBox={analysisResult?.xai_metadata?.bounding_box}
+            />
+          </div>
         )}
 
         {step === "RESULTS" && (
@@ -152,7 +188,8 @@ export function UploadFlow() {
               <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
                 <p className="text-sm text-amber-800">
-                  Risk level is unavailable for this analysis. Please retry or contact support.
+                  Risk level is unavailable for this analysis. Please retry or
+                  contact support.
                 </p>
               </div>
             )}
@@ -194,7 +231,6 @@ export function UploadFlow() {
                 </p>
               </div>
             </div>
-
           </div>
         )}
 
@@ -291,12 +327,6 @@ function toStatusText(result: AnalysisResponse): string {
   }
 
   return "Analysis failed.";
-}
-
-function toUiProgress(result: AnalysisResponse): number {
-  const raw = typeof result.progress === "number" ? result.progress : 0;
-  const clamped = Math.max(0, Math.min(100, raw));
-  return Math.round(45 + (clamped * 55) / 100);
 }
 
 function toRiskLevel(result: AnalysisResponse): RiskLevel | null {

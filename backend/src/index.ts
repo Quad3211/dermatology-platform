@@ -44,7 +44,7 @@ app.use(
 );
 
 // ── Body parsing ──────────────────────────────────────────────
-app.use(express.json({ limit: "50kb" }));
+app.use(express.json({ limit: "10mb" }));
 
 // ── Global rate limit ─────────────────────────────────────────
 app.use(

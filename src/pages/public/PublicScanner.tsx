@@ -5,12 +5,14 @@ import { PublicNavbar } from "../../components/shared/PublicNavbar";
 import { Button } from "../../components/core/Button";
 import {
   UploadCloud,
-  CheckCircle2,
   Lock,
   Activity,
   AlertTriangle,
   ArrowRight,
+  Camera,
 } from "lucide-react";
+import { CameraCapture } from "../../components/medical/CameraCapture";
+import { ScanningAnimation } from "../../components/shared/ScanningAnimation";
 
 export function PublicScanner() {
   const [file, setFile] = useState<File | null>(null);
@@ -20,6 +22,7 @@ export function PublicScanner() {
   const [scanProgress, setScanProgress] = useState(0);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<any>(null);
+  const [useCamera, setUseCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,68 +152,81 @@ export function PublicScanner() {
 
           <div className="p-8 lg:p-12">
             {!previewUrl ? (
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className="border-3 border-dashed border-slate-200 hover:border-primary-400 bg-slate-50 hover:bg-primary-50 transition-colors rounded-2xl flex flex-col items-center justify-center p-16 cursor-pointer group h-80"
-              >
-                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
-                  <UploadCloud className="w-10 h-10 text-primary-500" />
+              useCamera ? (
+                <div className="max-w-md mx-auto">
+                  <CameraCapture
+                    onCapture={(capturedFile) => {
+                      setFile(capturedFile);
+                      setPreviewUrl(URL.createObjectURL(capturedFile));
+                      setScanComplete(false);
+                      setUseCamera(false);
+                    }}
+                    onClose={() => setUseCamera(false)}
+                  />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">
-                  Drop your skin photo here
-                </h3>
-                <p className="text-slate-500 font-medium mb-6 text-center max-w-sm">
-                  Supports JPG, PNG, and HEIC up to 10MB. Images are analyzed
-                  locally and not saved.
-                </p>
-                <Button
-                  variant="outline"
-                  className="bg-white pointer-events-none"
+              ) : (
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-3 border-dashed border-slate-200 hover:border-primary-400 bg-slate-50 hover:bg-primary-50 transition-colors rounded-2xl flex flex-col items-center justify-center p-16 cursor-pointer group h-80"
                 >
-                  Browse Files
-                </Button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="image/jpeg,image/png,image/webp,image/heic"
-                  className="hidden"
-                />
-              </div>
+                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                    <UploadCloud className="w-10 h-10 text-primary-500" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">
+                    Drop your skin photo here
+                  </h3>
+                  <p className="text-slate-500 font-medium mb-6 text-center max-w-sm">
+                    Supports JPG, PNG, and HEIC up to 10MB. Images are analyzed
+                    locally and not saved.
+                  </p>
+                  <div
+                    className="flex gap-3 relative z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="outline"
+                      className="bg-white pointer-events-none"
+                    >
+                      Browse Files
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="bg-white hover:bg-slate-50 text-slate-700"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setUseCamera(true);
+                      }}
+                    >
+                      <Camera className="w-4 h-4 mr-2" />
+                      Take Photo
+                    </Button>
+                  </div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/jpeg,image/png,image/webp,image/heic"
+                    className="hidden"
+                  />
+                </div>
+              )
             ) : (
               <div className="flex flex-col md:flex-row gap-8">
                 {/* Image Preview Window */}
-                <div className="w-full md:w-1/2 relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 aspect-square shadow-inner">
-                  <img
-                    src={previewUrl}
-                    alt="Skin preview"
-                    className="w-full h-full object-cover"
+                <div className="w-full md:w-1/2">
+                  <ScanningAnimation
+                    imageUrl={previewUrl}
+                    isScanning={isScanning}
+                    scanProgress={scanProgress}
+                    scanComplete={scanComplete}
+                    statusText={
+                      isScanning ? "Processing mapping layers" : undefined
+                    }
+                    boundingBox={scanResult?.bounding_box}
                   />
-
-                  {isScanning && (
-                    <div className="absolute inset-0 z-10">
-                      <div
-                        className="w-full h-1 bg-primary-500 shadow-[0_0_15px_rgba(14,165,233,0.8)] absolute left-0 transition-all duration-100 ease-linear"
-                        style={{ top: `${scanProgress}%` }}
-                      />
-                      <div
-                        className="absolute inset-x-0 bottom-0 bg-primary-900/40 backdrop-blur-[2px] transition-all duration-100"
-                        style={{ top: `${scanProgress}%` }}
-                      />
-                    </div>
-                  )}
-
-                  {scanComplete && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="absolute inset-0 border-4 border-amber-400 z-20 flex items-center justify-center bg-black/30 pointer-events-none"
-                    >
-                      <div className="w-24 h-24 border-2 border-amber-400 border-dashed rounded-full" />
-                    </motion.div>
-                  )}
                 </div>
 
                 {/* Status Window */}
@@ -284,7 +300,7 @@ export function PublicScanner() {
                           },
                           {
                             threshold: 70,
-                            label: "Matching against clinical database...",
+                            label: "Drawing clinical bounding box...",
                           },
                         ].map((step, i) => (
                           <li
@@ -292,7 +308,18 @@ export function PublicScanner() {
                             className={`flex items-center text-sm font-medium ${scanProgress >= step.threshold ? "text-primary-700" : "text-slate-400"}`}
                           >
                             {scanProgress >= step.threshold + 20 ? (
-                              <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-500" />
+                              <svg
+                                className="w-4 h-4 mr-2 text-emerald-500"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                              </svg>
                             ) : (
                               <div
                                 className={`w-4 h-4 mr-2 rounded-full border-2 ${scanProgress >= step.threshold ? "border-primary-500 border-t-transparent animate-spin" : "border-slate-300"}`}

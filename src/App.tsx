@@ -12,6 +12,7 @@ import { Dashboard } from "./pages/patient/Dashboard";
 import { UploadFlow } from "./pages/patient/UploadFlow";
 import { EducationView } from "./pages/patient/EducationView";
 import { ConsultationBooking } from "./pages/patient/ConsultationBooking";
+import { ScanHistory } from "./pages/patient/ScanHistory";
 import { DoctorLayout } from "./components/layout/DoctorLayout";
 import { ReviewPortal } from "./pages/doctor/ReviewPortal";
 import { PatientList } from "./pages/doctor/PatientList";
@@ -55,6 +56,7 @@ function App() {
                 path="/patient/consultation"
                 element={<ConsultationBooking />}
               />
+              <Route path="/patient/history" element={<ScanHistory />} />
             </Route>
           </Route>
 

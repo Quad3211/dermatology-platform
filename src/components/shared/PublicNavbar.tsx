@@ -68,9 +68,7 @@ export function PublicNavbar() {
                 >
                   Log In
                 </Link>
-                <Link to="/scan">
-                  <Button>Start Free Screening</Button>
-                </Link>
+
               </>
             )}
           </div>

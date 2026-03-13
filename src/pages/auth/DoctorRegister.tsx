@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../../config/supabase";
 import { Button } from "../../components/core/Button";
 import { Input } from "../../components/core/Input";
-import { ShieldPlus, Activity, CheckCircle2 } from "lucide-react";
+import { ShieldPlus, Activity, CheckCircle2, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function DoctorRegister() {
@@ -13,6 +13,7 @@ export function DoctorRegister() {
   const [fullName, setFullName] = useState("");
   const [licenseNumber, setLicenseNumber] = useState("");
   const [specialty, setSpecialty] = useState("");
+  const [officeAddress, setOfficeAddress] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export function DoctorRegister() {
     if (password !== confirmPassword) {
       return setError("Passwords do not match");
     }
-    if (!fullName || !licenseNumber || !specialty) {
+    if (!fullName || !licenseNumber || !specialty || !officeAddress) {
       return setError("Please fill in all professional details");
     }
 
@@ -39,6 +40,7 @@ export function DoctorRegister() {
             full_name: fullName,
             license_number: licenseNumber,
             specialty,
+            office_address: officeAddress,
           },
         },
       });
@@ -119,7 +121,7 @@ export function DoctorRegister() {
               Create Provider Account
             </h3>
             <p className="text-slate-500 font-medium">
-              Register for verified access to clinical tools.
+              Register to access clinical tools.
             </p>
           </div>
 
@@ -156,6 +158,20 @@ export function DoctorRegister() {
                 onChange={(e) => setSpecialty(e.target.value)}
                 placeholder="Dermatology"
                 required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                <MapPin className="inline w-3.5 h-3.5 mr-1 text-emerald-500" />
+                Office Address (Jamaica)
+              </label>
+              <input
+                type="text"
+                value={officeAddress}
+                onChange={(e) => setOfficeAddress(e.target.value)}
+                placeholder="12 Hope Road, Kingston 6"
+                required
+                className="flex h-10 w-full rounded-md border border-surface-border bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
             <Input
@@ -208,7 +224,7 @@ export function DoctorRegister() {
           </div>
 
           <div className="text-center text-sm font-medium mt-6 pt-6 border-t border-slate-100">
-            <span className="text-slate-500">Already verified? </span>
+            <span className="text-slate-500">Already have an account? </span>
             <Link
               to="/doctor/login"
               className="text-emerald-600 hover:underline"

@@ -6,6 +6,9 @@ import {
   Loader2,
   AlertTriangle,
   UploadCloud,
+  MapPin,
+  User,
+  Stethoscope,
 } from "lucide-react";
 import {
   Card,
@@ -19,13 +22,40 @@ import { supabase } from "../../config/supabase";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+// ── Types ──────────────────────────────────────────────────────
+interface DoctorProfile {
+  id: string;
+  full_name: string;
+  avatar_url: string | null;
+  office_address: string | null;
+  specialty: string | null;
+}
+
 export function ConsultationBooking() {
+  const [selectedDoctor, setSelectedDoctor] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── Fetch available doctors ─────────────────────────────────
+  const { data: doctors = [], isLoading: isDoctorsLoading } = useQuery<
+    DoctorProfile[]
+  >({
+    queryKey: ["available-doctors"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, office_address, specialty")
+        .eq("role", "doctor")
+        .order("full_name");
+
+      if (error) throw error;
+      return (data ?? []) as DoctorProfile[];
+    },
+  });
 
   // Find most recent upload + any linked analysis (analysis may still be processing)
   const { data: latestUpload } = useQuery({
@@ -88,9 +118,11 @@ export function ConsultationBooking() {
     return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
   };
 
+  const selectedDoctorProfile = doctors.find((d) => d.id === selectedDoctor);
+
   const handleSubmit = async () => {
     // Guard — analysis_id is NOT NULL in schema; block if missing
-    if (!selectedDate || !selectedTime) return;
+    if (!selectedDate || !selectedTime || !selectedDoctor) return;
     if (!latestUpload?.analysis?.id) {
       setError(
         "No completed analysis found. Please upload and wait for analysis before booking.",
@@ -108,6 +140,7 @@ export function ConsultationBooking() {
 
       const { error: insertErr } = await supabase.from("consultations").insert({
         patient_id: user.id,
+        doctor_id: selectedDoctor,
         analysis_id: latestUpload.analysis.id, // guaranteed non-null here
         status: "pending",
         urgency:
@@ -140,9 +173,15 @@ export function ConsultationBooking() {
             Consultation Requested
           </h2>
           <p className="text-slate-600 mb-2">
-            Your request has been sent to our dermatology team.
+            Your request has been sent to{" "}
+            <strong>
+              Dr.{" "}
+              {selectedDoctorProfile?.full_name?.replace(/^Dr\.?\s*/i, "") ??
+                "your doctor"}
+            </strong>
+            .
           </p>
-          <p className="text-slate-500 text-sm mb-8">
+          <p className="text-slate-500 text-sm mb-4">
             You requested:{" "}
             <strong>
               {selectedDate &&
@@ -153,9 +192,12 @@ export function ConsultationBooking() {
                 })}{" "}
               at {selectedTime && formatTime(selectedTime)}
             </strong>
-            <br />A doctor will confirm or adjust the time based on
-            availability.
           </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 mb-8">
+            <AlertTriangle className="inline h-4 w-4 mr-1.5 -mt-0.5" />
+            The doctor must confirm this appointment. You'll be notified once
+            it's confirmed.
+          </div>
           <Link to="/patient">
             <Button>Return to Dashboard</Button>
           </Link>
@@ -171,8 +213,8 @@ export function ConsultationBooking() {
           Request a Consultation
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Select your preferred date and time. A dermatologist will confirm your
-          appointment.
+          Choose a doctor, select your preferred date and time. The doctor will
+          confirm your appointment.
         </p>
       </div>
 
@@ -238,13 +280,110 @@ export function ConsultationBooking() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {/* ── Step 1: Select a Doctor ─────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-lg">
+            <Stethoscope className="w-5 h-5 mr-3 text-primary-600" />
+            Step 1 — Choose Your Doctor
+          </CardTitle>
+          <p className="text-sm text-slate-500 mt-1">
+            Select a doctor near you. The doctor will need to confirm the
+            appointment on their end.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {isDoctorsLoading ? (
+            <div className="flex items-center justify-center py-8 text-slate-400">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Loading doctors…
+            </div>
+          ) : doctors.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-8">
+              No doctors are currently available.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {doctors.map((doc) => {
+                const isSelected = selectedDoctor === doc.id;
+                const initials = doc.full_name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2);
+
+                return (
+                  <button
+                    key={doc.id}
+                    onClick={() => setSelectedDoctor(doc.id)}
+                    className={cn(
+                      "relative flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all cursor-pointer",
+                      isSelected
+                        ? "border-primary-500 bg-primary-50 shadow-md ring-2 ring-primary-200"
+                        : "border-surface-border bg-white hover:border-slate-300 hover:shadow-sm",
+                    )}
+                  >
+                    {/* Avatar */}
+                    {doc.avatar_url ? (
+                      <img
+                        src={doc.avatar_url}
+                        alt={doc.full_name}
+                        className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 font-bold text-lg flex items-center justify-center shrink-0 border-2 border-white shadow-sm">
+                        {initials}
+                      </div>
+                    )}
+
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900 text-sm">
+                        Dr.{" "}
+                        {doc.full_name.replace(/^Dr\.?\s*/i, "")}
+                      </p>
+                      {doc.specialty && (
+                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {doc.specialty}
+                        </p>
+                      )}
+                      {doc.office_address && (
+                        <p className="text-xs text-slate-500 mt-1 flex items-start gap-1">
+                          <MapPin className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />
+                          <span>{doc.office_address}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Selected indicator */}
+                    {isSelected && (
+                      <div className="absolute top-2 right-2">
+                        <CheckCircle2 className="h-5 w-5 text-primary-600" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 2: Date & Time ─────────────────────────────────── */}
+      <div
+        className={cn(
+          "grid grid-cols-1 md:grid-cols-2 gap-8 transition-opacity",
+          !selectedDoctor && "opacity-50 pointer-events-none",
+        )}
+      >
         {/* Date picker */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-lg">
               <Calendar className="w-5 h-5 mr-3 text-primary-600" />
-              Preferred Date
+              Step 2 — Preferred Date
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -286,7 +425,7 @@ export function ConsultationBooking() {
           <CardHeader>
             <CardTitle className="flex items-center text-lg">
               <MessageSquare className="w-5 h-5 mr-3 text-primary-600" />
-              Preferred Time
+              Step 3 — Preferred Time
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-3 gap-2">
@@ -309,7 +448,12 @@ export function ConsultationBooking() {
       </div>
 
       {/* Notes */}
-      <Card>
+      <Card
+        className={cn(
+          "transition-opacity",
+          !selectedDoctor && "opacity-50 pointer-events-none",
+        )}
+      >
         <CardHeader>
           <CardTitle className="text-base">
             Additional Notes (optional)
@@ -338,6 +482,7 @@ export function ConsultationBooking() {
         <Button
           size="lg"
           disabled={
+            !selectedDoctor ||
             !selectedDate ||
             !selectedTime ||
             !latestUpload ||

@@ -10,8 +10,6 @@ import {
   Menu,
   X,
   Loader2,
-  ShieldAlert,
-  CheckCircle2,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { IncomingCallListener } from "../shared/IncomingCallListener";
@@ -22,7 +20,7 @@ export function DoctorLayout() {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const { data: profile, isLoading: isProfileLoading } = useQuery({
+  const { isLoading: isProfileLoading } = useQuery({
     queryKey: ["doctor-profile"],
     queryFn: async () => {
       const {
@@ -51,7 +49,7 @@ export function DoctorLayout() {
     { name: "Settings", path: "/doctor/settings", icon: Settings },
   ];
 
-  const isVerified = profile?.is_verified ?? false;
+
 
   return (
     <div className="min-h-screen bg-surface-muted flex flex-col">
@@ -161,46 +159,6 @@ export function DoctorLayout() {
         {isProfileLoading ? (
           <div className="flex h-full min-h-[50vh] items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-          </div>
-        ) : !isVerified ? (
-          <div className="max-w-2xl mx-auto mt-12 bg-white rounded-3xl p-10 border border-slate-200 shadow-xl text-center">
-            <div className="w-20 h-20 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-amber-100">
-              <ShieldAlert className="w-10 h-10 text-amber-500" />
-            </div>
-            <h2 className="text-3xl font-bold text-slate-900 mb-4 tracking-tight">
-              Account Pending Verification
-            </h2>
-            <p className="text-lg text-slate-600 mb-8 font-medium">
-              Thank you for joining SkinHealth. Your medical license and
-              credentials are currently under review by our administration team.
-            </p>
-            <div className="bg-slate-50 p-6 rounded-2xl text-left border border-slate-100 mb-8">
-              <h4 className="font-bold text-slate-800 mb-2">
-                What happens next?
-              </h4>
-              <ul className="space-y-3 text-slate-600 text-sm">
-                <li className="flex items-start">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mr-2 mt-0.5" />{" "}
-                  We verify your license number against the national registry.
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mr-2 mt-0.5" />{" "}
-                  We confirm your identity and standing.
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mr-2 mt-0.5" />{" "}
-                  You'll receive full access to patient AI-triage cases once
-                  approved.
-                </li>
-              </ul>
-            </div>
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={handleLogout}
-            >
-              Sign Out
-            </Button>
           </div>
         ) : (
           <>

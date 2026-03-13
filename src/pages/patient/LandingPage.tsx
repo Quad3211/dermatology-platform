@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   Stethoscope,
   Lock,
-  ArrowRight,
   CheckCircle2,
   Search,
   Heart,
@@ -93,14 +92,6 @@ export function LandingPage() {
                 variants={fadeInUp}
                 className="flex flex-col sm:flex-row gap-4"
               >
-                <Link to="/scan" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    className="w-full sm:w-auto hover:scale-105 transition-transform shadow-xl hover:shadow-primary-500/20 py-6 px-8 text-lg"
-                  >
-                    Start Free Screening <ArrowRight className="ml-2 w-5 h-5" />
-                  </Button>
-                </Link>
                 <a href="#how-it-works" className="w-full sm:w-auto">
                   <Button
                     variant="outline"
@@ -517,49 +508,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* 9. CTA Section */}
-      <section className="py-24 bg-gradient-to-br from-primary-700 to-primary-900 relative overflow-hidden text-center shadow-inner">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNHYtbDItMiAyaDZWMTJoLTZsLTIgMi0yLTJINHYxaDF2MmgtMXYxSDB2MmgyLjlsMiAySDF2Mmg0LjVsLTIgMkgwdjJoOGw2LTV2LTJsLTItMnYtMmwtMi0ydjJIMXYtMmgtMXYyaDBWMTRoMTB2MTJoNHYtaDR2LTEwaDR2Mmgwdi0xTDE0IDI0aDJ2MmgtMnYtMnpNNiAyMmg3djJINnptMTAtMnYxaDh2LTFoLTh6TTggMTJoLTFoNHYyaC00djFoNnYtMmgtMXYxSDN2LTFoNXptOC0xMGgydjJoLTJ6bS00IDJoLTJ2MmgyVjA0eiIvPjwvZz48L3N2Zz4=')] opacity-10" />
 
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-100px" }}
-          variants={staggerContainer}
-          className="max-w-4xl mx-auto px-4 relative z-10"
-        >
-          <motion.h2
-            variants={fadeInUp}
-            className="text-4xl lg:text-5xl font-extrabold text-white mb-6 tracking-tight drop-shadow-md"
-          >
-            Get Clarity on Your Skin Health — Today
-          </motion.h2>
-          <motion.p
-            variants={fadeInUp}
-            className="text-primary-100 text-lg mb-10 max-w-2xl mx-auto font-medium"
-          >
-            Free to start. No appointment needed. A licensed dermatologist is
-            ready to review your case if the AI recommends it.
-          </motion.p>
-          <motion.div variants={fadeInUp}>
-            <Link to="/scan">
-              <Button
-                size="lg"
-                className="bg-white text-primary-900 hover:bg-slate-50 border-none shadow-2xl text-lg px-10 py-7 rounded-full hover:scale-105 transition-transform font-bold"
-              >
-                Start Free Screening
-              </Button>
-            </Link>
-          </motion.div>
-          <motion.p
-            variants={fadeInUp}
-            className="text-primary-300 text-sm mt-8 font-medium"
-          >
-            This platform provides preliminary triage assistance only — not
-            medical advice or diagnosis. In an emergency, call 911 immediately.
-          </motion.p>
-        </motion.div>
-      </section>
 
       {/* 10. Footer */}
       <footer className="bg-slate-900 text-slate-400 py-16 border-t border-slate-800">

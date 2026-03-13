@@ -66,8 +66,11 @@ export function PublicScanner() {
       const base64Image = await base64Promise;
 
       // 2. Call real public API
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
-      const res = await fetch(`${apiUrl}/api/v1/public/scan`, {
+      const apiBase =
+        import.meta.env.VITE_API_BASE_URL ||
+        import.meta.env.VITE_API_URL ||
+        "http://localhost:3001/api/v1";
+      const res = await fetch(`${apiBase}/public/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

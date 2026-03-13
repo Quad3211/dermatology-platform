@@ -528,7 +528,6 @@ export function LandingPage() {
                 { name: "Medical Disclaimer", path: "/disclaimer" },
                 { name: "Contact", path: "/contact" },
                 { name: "Terms of Use", path: "/terms" },
-                { name: "Admin Login", path: "/admin/login" },
               ].map((link) => (
                 <Link
                   key={link.name}

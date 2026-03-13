@@ -49,8 +49,6 @@ export function DoctorLayout() {
     { name: "Settings", path: "/doctor/settings", icon: Settings },
   ];
 
-
-
   return (
     <div className="min-h-screen bg-surface-muted flex flex-col">
       <nav className="bg-white border-b border-surface-border sticky top-0 z-50">

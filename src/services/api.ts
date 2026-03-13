@@ -57,6 +57,12 @@ export interface AnalysisResponse {
     explanation: string;
   };
   xai_metadata?: {
+    bounding_box?: {
+      ymin: number;
+      xmin: number;
+      ymax: number;
+      xmax: number;
+    };
     gradcamUrl: string | null;
     attentionRegions: Array<{
       x: number;

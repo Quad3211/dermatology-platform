@@ -97,7 +97,7 @@ consultationsRouter.post(
 consultationsRouter.get(
   "/",
   verifyJWT,
-  requireRole("patient", "doctor", "admin"),
+  requireRole("patient", "doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;
@@ -145,7 +145,7 @@ consultationsRouter.get(
 consultationsRouter.get(
   "/:id",
   verifyJWT,
-  requireRole("patient", "doctor", "admin"),
+  requireRole("patient", "doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;
@@ -180,7 +180,7 @@ consultationsRouter.get(
 consultationsRouter.patch(
   "/:id",
   verifyJWT,
-  requireRole("doctor", "admin"),
+  requireRole("doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;

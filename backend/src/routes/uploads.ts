@@ -123,7 +123,7 @@ uploadsRouter.post(
 uploadsRouter.get(
   "/",
   verifyJWT,
-  requireRole("patient", "doctor", "admin"),
+  requireRole("patient", "doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;
@@ -167,7 +167,7 @@ uploadsRouter.get(
 uploadsRouter.get(
   "/:id",
   verifyJWT,
-  requireRole("patient", "doctor", "admin"),
+  requireRole("patient", "doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;
@@ -202,7 +202,7 @@ uploadsRouter.get(
 uploadsRouter.patch(
   "/:id/status",
   verifyJWT,
-  requireRole("patient", "admin"),
+  requireRole("patient"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;

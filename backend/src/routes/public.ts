@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import { supabase } from "../services/supabase.js";
 import { HttpError } from "../middleware/errorHandler.js";
 import type { Request, Response, NextFunction } from "express";
-import crypto from "crypto";
+import { analyzeSkinWithGemini } from "../services/geminiService.js";
 
 export const publicRouter = Router();
 
@@ -17,9 +17,6 @@ const publicRateLimit = rateLimit({
     },
   },
 });
-
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL ?? "http://localhost:8000";
-const STORAGE_BUCKET = "skin-images";
 
 // ── POST /public/scan ─────────────────────────────────────────────
 publicRouter.post(
@@ -36,60 +33,26 @@ publicRouter.post(
         );
       }
 
-      // 1. Upload temporarily to Supabase using Service Key to bypass RLS
-      const buffer = Buffer.from(base64Image, "base64");
-      const tempPath = `public-scans/${crypto.randomUUID()}.${mimeType.split("/")[1]}`;
+      // Call our local Gemini service directly
+      const aiResult = await analyzeSkinWithGemini(base64Image, mimeType);
 
-      const { error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(tempPath, buffer, {
-          contentType: mimeType,
-        });
-
-      if (uploadError) {
-        throw new HttpError(
-          500,
-          "STORAGE_ERROR",
-          "Failed to upload image temporarily.",
-        );
-      }
-
-      try {
-        // 2. Get a signed url
-        const { data: signedData, error: signError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .createSignedUrl(tempPath, 300);
-
-        if (signError || !signedData?.signedUrl) {
-          throw new HttpError(
-            500,
-            "STORAGE_ERROR",
-            "Failed to generate signed url.",
-          );
-        }
-
-        // 3. Send to AI Service sync endpoint
-        const aiResponse = await fetch(`${AI_SERVICE_URL}/analyze-sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: signedData.signedUrl }),
-        });
-
-        if (!aiResponse.ok) {
-          throw new HttpError(500, "AI_ERROR", "AI service failed to analyze.");
-        }
-
-        const aiResult = await aiResponse.json();
-
-        // 4. Return the result
-        res.json({
-          success: true,
-          data: aiResult,
-        });
-      } finally {
-        // 5. Always delete the temp image immediately to protect privacy
-        await supabase.storage.from(STORAGE_BUCKET).remove([tempPath]);
-      }
+      // Return the result
+      res.json({
+        success: true,
+        data: {
+          risk_level: aiResult.risk_level,
+          confidence: Math.round(aiResult.confidence * 1000) / 1000,
+          severity_score: Math.round(aiResult.severity_score * 10) / 10,
+          summary: aiResult.summary,
+          top_label: aiResult.top_label,
+          bounding_box: aiResult.bounding_box || null,
+          // Sync scans typically have flags for referral and emergency
+          referral_required: ["MODERATE", "HIGH", "CRITICAL"].includes(
+            aiResult.risk_level,
+          ),
+          emergency_flag: aiResult.risk_level === "CRITICAL",
+        },
+      });
     } catch (err) {
       next(err);
     }

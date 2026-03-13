@@ -130,7 +130,7 @@ analysisRouter.post(
 analysisRouter.get(
   "/:analysisId",
   verifyJWT,
-  requireRole("patient", "doctor", "admin"),
+  requireRole("patient", "doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;
@@ -170,7 +170,7 @@ analysisRouter.get(
 analysisRouter.get(
   "/upload/:uploadId",
   verifyJWT,
-  requireRole("patient", "doctor", "admin"),
+  requireRole("patient", "doctor"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authedReq = req as AuthenticatedRequest;

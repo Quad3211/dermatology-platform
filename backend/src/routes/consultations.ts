@@ -11,7 +11,7 @@ import type { Request, Response, NextFunction } from "express";
 export const consultationsRouter = Router();
 
 const CreateConsultationSchema = z.object({
-  analysisId: z.string().uuid(),
+  analysisId: z.string().uuid().optional(),
   preferredDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -44,28 +44,33 @@ consultationsRouter.post(
         );
 
       const { analysisId, preferredDate, notes, urgency } = parsed.data;
+      let resolvedAnalysisId: string | null = null;
 
-      // Verify analysis belongs to patient
-      const { data: analysis, error: analysisErr } = await supabase
-        .from("analysis_results")
-        .select("id, upload_id, uploads!inner(user_id)")
-        .eq("id", analysisId)
-        .single();
+      if (analysisId) {
+        // Verify analysis belongs to patient
+        const { data: analysis, error: analysisErr } = await supabase
+          .from("analysis_results")
+          .select("id, upload_id, uploads!inner(user_id)")
+          .eq("id", analysisId)
+          .single();
 
-      if (analysisErr || !analysis)
-        throw new HttpError(404, "NOT_FOUND", "Analysis not found.");
-      if (
-        (analysis.uploads as unknown as { user_id: string }).user_id !==
-        authedReq.userId
-      ) {
-        throw new HttpError(403, "FORBIDDEN", "Access denied.");
+        if (analysisErr || !analysis)
+          throw new HttpError(404, "NOT_FOUND", "Analysis not found.");
+        if (
+          (analysis.uploads as unknown as { user_id: string }).user_id !==
+          authedReq.userId
+        ) {
+          throw new HttpError(403, "FORBIDDEN", "Access denied.");
+        }
+
+        resolvedAnalysisId = analysisId;
       }
 
       const { data: consultation, error } = await supabase
         .from("consultations")
         .insert({
           patient_id: authedReq.userId,
-          analysis_id: analysisId,
+          analysis_id: resolvedAnalysisId,
           urgency,
           patient_notes: notes ?? null,
           preferred_date: preferredDate ?? null,
@@ -81,7 +86,7 @@ consultationsRouter.post(
         userId: authedReq.userId,
         resourceType: "consultation",
         resourceId: consultation.id,
-        metadata: { analysisId, urgency },
+        metadata: { analysisId: resolvedAnalysisId, urgency },
         ipAddress: req.ip,
         userAgent: String(req.headers["user-agent"] ?? ""),
       });

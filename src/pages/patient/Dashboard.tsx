@@ -253,9 +253,8 @@ export function Dashboard() {
                     )
                   : null;
 
-              const isScheduledOrReviewed =
-                consult &&
-                ["scheduled", "reviewed", "closed"].includes(consult.status);
+              const canMessage = Boolean(consult);
+              const canCall = consult?.status === "scheduled";
 
               return (
                 <Card
@@ -394,15 +393,17 @@ export function Dashboard() {
                     </div>
 
                     <div className="bg-slate-50 p-5 lg:p-6 border-t md:border-t-0 md:border-l border-surface-border flex flex-col justify-center gap-3 w-full md:w-48 shrink-0">
-                      {isScheduledOrReviewed ? (
+                      {canMessage ? (
                         <>
-                          <Button
-                            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
-                            onClick={() => setCallConsultId(consult.id)}
-                          >
-                            <Video className="h-4 w-4 mr-2" />
-                            Call Doctor
-                          </Button>
+                          {canCall && (
+                            <Button
+                              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                              onClick={() => setCallConsultId(consult.id)}
+                            >
+                              <Video className="h-4 w-4 mr-2" />
+                              Call Doctor
+                            </Button>
+                          )}
                           <Button
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                             onClick={() => setChatConsultId(consult.id)}
@@ -413,18 +414,9 @@ export function Dashboard() {
                         </>
                       ) : (
                         <Link to="/patient/consultation">
-                          <Button
-                            className="w-full"
-                            variant={
-                              consult?.status === "pending"
-                                ? "outline"
-                                : "primary"
-                            }
-                          >
+                          <Button className="w-full" variant="primary">
                             <Calendar className="h-4 w-4 mr-2" />
-                            {consult?.status === "pending"
-                              ? "View Request"
-                              : "Book Consult"}
+                            Book Consult
                           </Button>
                         </Link>
                       )}

@@ -27,7 +27,7 @@ export function ConsultationBooking() {
   const [isBooked, setIsBooked] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Find most recent upload + any linked analysis (analysis may still be processing)
+  // Find most recent upload + any linked analysis (analysis may still be processing or failed)
   const { data: latestUpload } = useQuery({
     queryKey: ["latest-upload"],
     queryFn: async () => {
@@ -36,12 +36,12 @@ export function ConsultationBooking() {
       } = await supabase.auth.getUser();
       if (!user) return null;
 
-      // Accept any upload that's been sent to storage (uploaded, processing, or complete)
+      // Accept any upload that's been sent to storage (including failed analysis)
       const { data: uploads } = await supabase
         .from("uploads")
         .select("id, status")
         .eq("user_id", user.id)
-        .in("status", ["uploaded", "processing", "complete"])
+        .in("status", ["uploaded", "processing", "complete", "failed"])
         .order("created_at", { ascending: false })
         .limit(1);
 
@@ -89,14 +89,7 @@ export function ConsultationBooking() {
   };
 
   const handleSubmit = async () => {
-    // Guard — analysis_id is NOT NULL in schema; block if missing
-    if (!selectedDate || !selectedTime) return;
-    if (!latestUpload?.analysis?.id) {
-      setError(
-        "No completed analysis found. Please upload and wait for analysis before booking.",
-      );
-      return;
-    }
+    if (!selectedDate || !selectedTime || !latestUpload) return;
     setIsSubmitting(true);
     setError(null);
 
@@ -108,7 +101,7 @@ export function ConsultationBooking() {
 
       const { error: insertErr } = await supabase.from("consultations").insert({
         patient_id: user.id,
-        analysis_id: latestUpload.analysis.id, // guaranteed non-null here
+        analysis_id: latestUpload.analysis?.id ?? null,
         status: "pending",
         urgency:
           latestUpload.analysis?.risk_level === "HIGH"
@@ -177,7 +170,17 @@ export function ConsultationBooking() {
       </div>
 
       {/* Linked analysis — shown if analysis exists */}
-      {latestUpload?.analysis && (
+      {latestUpload?.analysis?.status === "failed" && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+          <p className="text-sm text-amber-800">
+            The AI analysis for your latest upload failed. You can still request
+            a consultation and a dermatologist will review your case.
+          </p>
+        </div>
+      )}
+
+      {latestUpload?.analysis && latestUpload.analysis.status !== "failed" && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
           <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0" />
           <p className="text-sm text-blue-800">
@@ -185,18 +188,6 @@ export function ConsultationBooking() {
             <strong>Risk: {latestUpload.analysis.risk_level}</strong> (
             {((latestUpload.analysis.confidence ?? 0) * 100).toFixed(0)}%
             confidence)
-          </p>
-        </div>
-      )}
-
-      {/* Upload found but no analysis yet */}
-      {latestUpload && !latestUpload.analysis && (
-        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0" />
-          <p className="text-sm text-blue-800">
-            Your uploaded image has been found. The AI analysis may still be
-            processing — your consultation request will be linked once it
-            completes.
           </p>
         </div>
       )}
@@ -210,7 +201,7 @@ export function ConsultationBooking() {
               No uploaded image found.
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
-              You must upload a skin image and wait for analysis before booking.
+              You need to upload a skin image at least once before booking.
             </p>
             <Link
               to="/patient/upload"
@@ -222,17 +213,17 @@ export function ConsultationBooking() {
         </div>
       )}
 
-      {/* Upload exists but analysis still processing */}
+      {/* Upload exists but analysis missing (processing or failed) */}
       {latestUpload && !latestUpload.analysis && (
         <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
           <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-blue-800">
-              AI Analysis Still Processing
+              Analysis Not Available Yet
             </p>
             <p className="text-xs text-blue-700 mt-0.5">
-              Your uploaded image is being analysed. Please wait a moment and
-              refresh this page.
+              You can still request a consultation now. If the AI analysis
+              completes later, it will be linked automatically.
             </p>
           </div>
         </div>
@@ -337,13 +328,7 @@ export function ConsultationBooking() {
       <div className="flex justify-end pt-2">
         <Button
           size="lg"
-          disabled={
-            !selectedDate ||
-            !selectedTime ||
-            !latestUpload ||
-            !latestUpload.analysis?.id ||
-            isSubmitting
-          }
+          disabled={!selectedDate || !selectedTime || !latestUpload || isSubmitting}
           onClick={handleSubmit}
         >
           {isSubmitting ? (

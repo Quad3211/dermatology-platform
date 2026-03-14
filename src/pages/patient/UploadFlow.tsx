@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { ImageUploader } from "../../components/medical/ImageUploader";
 import { ScanningAnimation } from "../../components/shared/ScanningAnimation";
@@ -240,19 +241,24 @@ export function UploadFlow() {
               <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
               <p className="text-sm text-red-800">{errorMsg}</p>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStep("UPLOAD");
-                setErrorMsg("");
-                setStatusText("");
-                setAnalysisResult(null);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(null);
-              }}
-            >
-              Try Again
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStep("UPLOAD");
+                  setErrorMsg("");
+                  setStatusText("");
+                  setAnalysisResult(null);
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
+                  setPreviewUrl(null);
+                }}
+              >
+                Try Again
+              </Button>
+              <Button variant="primary" asChild>
+                <Link to="/patient/consultation">Request Consultation</Link>
+              </Button>
+            </div>
           </div>
         )}
       </div>
